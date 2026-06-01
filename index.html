@@ -7,6 +7,17 @@
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body { font-family: 'Segoe UI', system-ui, sans-serif; background: #f0f2f5; padding: 1rem; max-width: 700px; margin: auto; }
+
+        /* Caixa de autenticação */
+        .auth-box { background: white; border-radius: 12px; padding: 1rem; margin-bottom: 1rem; box-shadow: 0 2px 8px rgba(0,0,0,0.08); display: flex; flex-direction: column; gap: 0.6rem; }
+        .auth-box h3 { margin-bottom: 0.2rem; font-size: 1rem; }
+        .auth-row { display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center; }
+        .auth-row input { padding: 0.6rem; border: 1px solid #ddd; border-radius: 8px; font-size: 0.95rem; flex: 1; min-width: 150px; }
+        .auth-row button { padding: 0.6rem 1rem; border: none; border-radius: 8px; cursor: pointer; font-weight: bold; }
+        .btn-signin { background: #2563eb; color: white; }
+        .btn-signup { background: #e5e7eb; color: #333; }
+        .auth-error { color: #dc3545; font-size: 0.85rem; }
+
         h1 { text-align: center; margin-bottom: 0.5rem; color: #1a1a2e; font-size: 1.8rem; }
         .user-info { text-align: center; font-size: 0.8rem; color: #888; margin-bottom: 1rem; }
 
@@ -60,93 +71,108 @@
 
         .conta-vencida { background-color: #ffe5e5; }
         .conta-vencida .item-info strong { color: #b91c1c; }
+
+        .main-app { display: none; }
+        .main-app.visible { display: block; }
     </style>
 </head>
 <body>
-    <h1>💰 Gestão Financeira</h1>
-    <div class="user-info" id="userStatus">Conectando...</div>
-
-    <div class="tabs">
-        <button class="tab-btn active" data-tab="compras">🛒 Compras</button>
-        <button class="tab-btn" data-tab="contas">📄 Contas</button>
-        <button class="tab-btn" data-tab="lazer">🎉 Lazer</button>
-        <button class="tab-btn" data-tab="resumo">📊 Resumo</button>
+    <!-- Caixa de autenticação (aparece antes de logar) -->
+    <div id="authContainer" class="auth-box">
+        <h3>🔐 Acessar sua conta</h3>
+        <div class="auth-row">
+            <input type="email" id="authEmail" placeholder="E-mail">
+            <input type="password" id="authPassword" placeholder="Senha">
+            <button class="btn-signin" id="btnSignIn">Entrar</button>
+            <button class="btn-signup" id="btnSignUp">Criar conta</button>
+        </div>
+        <div class="auth-error" id="authError"></div>
     </div>
 
-    <div class="mes-selector">
-        <label>📅 Período:</label>
-        <input type="month" id="mesAnoFiltro">
-        <span style="font-size:0.8rem; color:#666;">(dados do mês)</span>
-    </div>
+    <!-- Conteúdo principal (oculto até autenticar) -->
+    <div id="mainApp" class="main-app">
+        <h1>💰 Gestão Financeira</h1>
+        <div class="user-info" id="userStatus">Conectado</div>
 
-    <!-- Guia Compras -->
-    <div id="tab-compras" class="tab-content active">
-        <div class="card row">
-            <label>💰 Orçamento:</label>
-            <input type="number" id="orcamento" placeholder="R$ 0,00" min="0" step="0.01" style="width:120px;">
-            <span style="margin-left:auto;">Saldo: <strong id="valorSaldo">R$ 0,00</strong></span>
+        <div class="tabs">
+            <button class="tab-btn active" data-tab="compras">🛒 Compras</button>
+            <button class="tab-btn" data-tab="contas">📄 Contas</button>
+            <button class="tab-btn" data-tab="lazer">🎉 Lazer</button>
+            <button class="tab-btn" data-tab="resumo">📊 Resumo</button>
         </div>
-        <div class="card row">
-            <span>Subtotal do período: <strong id="valorSubtotal">R$ 0,00</strong></span>
-        </div>
-        <div class="card row">
-            <input type="text" id="produto" placeholder="Nome do produto" style="flex:2;">
-            <button id="adicionar">Adicionar</button>
-        </div>
-        <div id="listaCompras"></div>
-    </div>
 
-    <!-- Guia Contas -->
-    <div id="tab-contas" class="tab-content">
-        <div class="card row">
-            <label>Entradas (Renda): R$</label>
-            <input type="number" id="entradas" placeholder="0,00" min="0" step="0.01" style="width:120px;">
+        <div class="mes-selector">
+            <label>📅 Período:</label>
+            <input type="month" id="mesAnoFiltro">
+            <span style="font-size:0.8rem; color:#666;">(dados do mês)</span>
         </div>
-        <div class="card">
-            <div class="row">
-                <input type="text" id="contaNome" placeholder="Nome da conta" style="flex:2;">
-                <input type="number" id="contaValor" placeholder="Valor R$" min="0" step="0.01" style="width:100px;">
-                <input type="date" id="contaVencimento" style="width:130px;">
-                <label><input type="checkbox" id="contaParcelado"> Parcelado</label>
-                <div id="parcelaContainer" style="display:none;">
-                    <input type="number" id="contaParcelas" placeholder="Vezes" min="1" step="1" style="width:70px;">
+
+        <!-- Guias (mesmo conteúdo de antes) -->
+        <div id="tab-compras" class="tab-content active">
+            <div class="card row">
+                <label>💰 Orçamento:</label>
+                <input type="number" id="orcamento" placeholder="R$ 0,00" min="0" step="0.01" style="width:120px;">
+                <span style="margin-left:auto;">Saldo: <strong id="valorSaldo">R$ 0,00</strong></span>
+            </div>
+            <div class="card row">
+                <span>Subtotal do período: <strong id="valorSubtotal">R$ 0,00</strong></span>
+            </div>
+            <div class="card row">
+                <input type="text" id="produto" placeholder="Nome do produto" style="flex:2;">
+                <button id="adicionar">Adicionar</button>
+            </div>
+            <div id="listaCompras"></div>
+        </div>
+
+        <div id="tab-contas" class="tab-content">
+            <div class="card row">
+                <label>Entradas (Renda): R$</label>
+                <input type="number" id="entradas" placeholder="0,00" min="0" step="0.01" style="width:120px;">
+            </div>
+            <div class="card">
+                <div class="row">
+                    <input type="text" id="contaNome" placeholder="Nome da conta" style="flex:2;">
+                    <input type="number" id="contaValor" placeholder="Valor R$" min="0" step="0.01" style="width:100px;">
+                    <input type="date" id="contaVencimento" style="width:130px;">
+                    <label><input type="checkbox" id="contaParcelado"> Parcelado</label>
+                    <div id="parcelaContainer" style="display:none;">
+                        <input type="number" id="contaParcelas" placeholder="Vezes" min="1" step="1" style="width:70px;">
+                    </div>
+                    <button id="addConta">+</button>
                 </div>
-                <button id="addConta">+</button>
+            </div>
+            <div id="listaContas"></div>
+            <div class="card row">
+                <span>Total contas: <strong id="totalContas">R$ 0,00</strong></span>
+                <span style="margin-left:auto;">Restante: <strong id="restanteContas">R$ 0,00</strong></span>
             </div>
         </div>
-        <div id="listaContas"></div>
-        <div class="card row">
-            <span>Total contas: <strong id="totalContas">R$ 0,00</strong></span>
-            <span style="margin-left:auto;">Restante: <strong id="restanteContas">R$ 0,00</strong></span>
-        </div>
-    </div>
 
-    <!-- Guia Lazer -->
-    <div id="tab-lazer" class="tab-content">
-        <div class="card row">
-            <input type="text" id="lazerDescricao" placeholder="Descrição" style="flex:2;">
-            <input type="number" id="lazerValor" placeholder="Valor R$" min="0" step="0.01" style="width:100px;">
-            <select id="lazerPagamento">
-                <option value="debito">Débito</option>
-                <option value="credito">Crédito</option>
-            </select>
-            <button id="addLazer">+</button>
+        <div id="tab-lazer" class="tab-content">
+            <div class="card row">
+                <input type="text" id="lazerDescricao" placeholder="Descrição" style="flex:2;">
+                <input type="number" id="lazerValor" placeholder="Valor R$" min="0" step="0.01" style="width:100px;">
+                <select id="lazerPagamento">
+                    <option value="debito">Débito</option>
+                    <option value="credito">Crédito</option>
+                </select>
+                <button id="addLazer">+</button>
+            </div>
+            <div id="listaLazer"></div>
+            <div class="card row">
+                <span>Total lazer: <strong id="totalLazer">R$ 0,00</strong></span>
+            </div>
         </div>
-        <div id="listaLazer"></div>
-        <div class="card row">
-            <span>Total lazer: <strong id="totalLazer">R$ 0,00</strong></span>
-        </div>
-    </div>
 
-    <!-- Guia Resumo -->
-    <div id="tab-resumo" class="tab-content">
-        <div class="card">
-            <div class="resumo-grid">
-                <div class="resumo-item"><div class="resumo-label">Entradas</div><div class="resumo-valor positivo" id="resEntradas">R$ 0,00</div></div>
-                <div class="resumo-item"><div class="resumo-label">Compras</div><div class="resumo-valor" id="resCompras">R$ 0,00</div></div>
-                <div class="resumo-item"><div class="resumo-label">Contas</div><div class="resumo-valor" id="resContas">R$ 0,00</div></div>
-                <div class="resumo-item"><div class="resumo-label">Lazer</div><div class="resumo-valor" id="resLazer">R$ 0,00</div></div>
-                <div class="resumo-item" style="grid-column: span 2;"><div class="resumo-label">Saldo Geral</div><div class="resumo-valor" id="resSaldo">R$ 0,00</div></div>
+        <div id="tab-resumo" class="tab-content">
+            <div class="card">
+                <div class="resumo-grid">
+                    <div class="resumo-item"><div class="resumo-label">Entradas</div><div class="resumo-valor positivo" id="resEntradas">R$ 0,00</div></div>
+                    <div class="resumo-item"><div class="resumo-label">Compras</div><div class="resumo-valor" id="resCompras">R$ 0,00</div></div>
+                    <div class="resumo-item"><div class="resumo-label">Contas</div><div class="resumo-valor" id="resContas">R$ 0,00</div></div>
+                    <div class="resumo-item"><div class="resumo-label">Lazer</div><div class="resumo-valor" id="resLazer">R$ 0,00</div></div>
+                    <div class="resumo-item" style="grid-column: span 2;"><div class="resumo-label">Saldo Geral</div><div class="resumo-valor" id="resSaldo">R$ 0,00</div></div>
+                </div>
             </div>
         </div>
     </div>
@@ -184,25 +210,59 @@
         let contaEditIndex = -1;
         let lazerEditIndex = -1;
 
-        function formatarMoeda(v) { return v.toFixed(2).replace('.', ','); }
-        function escapeHtml(t) { const d = document.createElement('div'); d.textContent = t; return d.innerHTML; }
+        const authContainer = document.getElementById('authContainer');
+        const mainApp = document.getElementById('mainApp');
+        const authError = document.getElementById('authError');
 
         // ========== AUTENTICAÇÃO ==========
-        auth.signInAnonymously()
-            .then(() => console.log('Autenticação anônima iniciada.'))
-            .catch(err => {
-                console.error('Erro na autenticação:', err);
-                document.getElementById('userStatus').textContent = '🔴 Falha na conexão. Verifique o Firebase.';
-            });
-
+        // Mostrar/esconder UI conforme estado de autenticação
         auth.onAuthStateChanged(user => {
             if (user) {
                 userId = user.uid;
-                document.getElementById('userStatus').textContent = '🟢 Conectado à nuvem (anônimo)';
+                document.getElementById('userStatus').textContent = `🟢 Logado como ${user.email}`;
+                authContainer.style.display = 'none';
+                mainApp.classList.add('visible');
                 carregarTodosDados();
             } else {
                 userId = null;
-                document.getElementById('userStatus').textContent = '🔴 Não conectado. Recarregue a página.';
+                authContainer.style.display = 'block';
+                mainApp.classList.remove('visible');
+            }
+        });
+
+        // Sign In
+        document.getElementById('btnSignIn').addEventListener('click', async () => {
+            const email = document.getElementById('authEmail').value.trim();
+            const password = document.getElementById('authPassword').value;
+            if (!email || !password) {
+                authError.textContent = 'Preencha e-mail e senha.';
+                return;
+            }
+            try {
+                await auth.signInWithEmailAndPassword(email, password);
+                authError.textContent = '';
+            } catch (error) {
+                authError.textContent = 'Erro: ' + error.message;
+            }
+        });
+
+        // Sign Up (criar nova conta)
+        document.getElementById('btnSignUp').addEventListener('click', async () => {
+            const email = document.getElementById('authEmail').value.trim();
+            const password = document.getElementById('authPassword').value;
+            if (!email || !password) {
+                authError.textContent = 'Preencha e-mail e senha.';
+                return;
+            }
+            if (password.length < 6) {
+                authError.textContent = 'Senha deve ter pelo menos 6 caracteres.';
+                return;
+            }
+            try {
+                await auth.createUserWithEmailAndPassword(email, password);
+                authError.textContent = '';
+            } catch (error) {
+                authError.textContent = 'Erro: ' + error.message;
             }
         });
 
@@ -230,8 +290,8 @@
                 document.getElementById('orcamento').value = orcamento || '';
                 renderizarTodasGuias();
             } catch (error) {
-                console.error('Erro ao carregar dados:', error);
-                alert('Erro ao carregar dados. Tente novamente.');
+                console.error('Erro ao carregar:', error);
+                alert('Erro ao carregar dados.');
             }
         }
 
@@ -304,7 +364,7 @@
         }
 
         async function salvarCompra(item, id) {
-            if (!userId) return alert('Você não está autenticado.');
+            if (!userId) return alert('Autenticação requerida.');
             const docRef = db.collection('usuarios').doc(userId).collection('compras').doc(id || undefined);
             if (id) await docRef.update(item);
             else await docRef.set(item);
@@ -314,7 +374,7 @@
         function updateDet(e) { const idx = parseInt(e.target.dataset.idx); const campo = e.target.dataset.field; let val = e.target.value.trim(); const item = itensCompras[idx]; if (campo === 'quantidade') item.quantidade = val === '' ? null : Number(val); else if (campo === 'preco') item.preco = val === '' ? null : Number(val).toFixed(2); salvarCompra({ [campo]: item[campo] }, item.id); atualizarTotaisCompras(); }
 
         async function adicionarProduto() {
-            if (!userId) return alert('Aguardando autenticação. Tente novamente em instantes.');
+            if (!userId) return alert('Faça login primeiro.');
             const nome = document.getElementById('produto').value.trim();
             if (!nome) return alert('Nome obrigatório.');
             try {
@@ -324,18 +384,13 @@
                 itensCompras.push(novoItem);
                 renderizarCompras();
                 document.getElementById('produto').value = '';
-            } catch (error) {
-                console.error('Erro ao adicionar:', error);
-                alert('Erro ao adicionar produto.');
-            }
+            } catch (error) { alert('Erro ao adicionar produto.'); }
         }
         document.getElementById('adicionar').addEventListener('click', adicionarProduto);
         document.getElementById('orcamento').addEventListener('input', function() { orcamento = parseFloat(this.value) || 0; salvarMeta(); atualizarTotaisCompras(); });
 
         // ---------- CONTAS ----------
         function totalContas() { return contasData.lista.reduce((s, c) => s + (parseFloat(c.valor)||0), 0); }
-        function agruparContasPorVencimento() { /* igual */ return { grupos: {}, chaves: [] }; } // mantido original
-
         function renderizarContas() {
             const container = document.getElementById('listaContas');
             if (contasData.lista.length === 0) {
@@ -393,7 +448,7 @@
         }
 
         async function adicionarConta() {
-            if (!userId) return alert('Autenticação pendente.');
+            if (!userId) return alert('Faça login.');
             const nome = document.getElementById('contaNome').value.trim();
             const valor = parseFloat(document.getElementById('contaValor').value)||0;
             const venc = document.getElementById('contaVencimento').value;
@@ -465,7 +520,7 @@
             document.getElementById('totalLazer').textContent = `R$ ${formatarMoeda(totalLazer())}`;
         }
         async function adicionarLazer() {
-            if (!userId) return alert('Autenticação pendente.');
+            if (!userId) return alert('Faça login.');
             const desc = document.getElementById('lazerDescricao').value.trim();
             const valor = parseFloat(document.getElementById('lazerValor').value)||0;
             const pag = document.getElementById('lazerPagamento').value;
@@ -495,7 +550,24 @@
         document.getElementById('addLazer').addEventListener('click', adicionarLazer);
 
         // ========== RESUMO ==========
-        function atualizarResumo() { /* igual, usando funções calcSubtotal, totalContas, totalLazer */ }
+        function atualizarResumo() {
+            const entradas = contasData.entradas || 0;
+            const compras = calcSubtotal();
+            const contas = totalContas();
+            const lazer = totalLazer();
+            const saldo = entradas - (compras + contas + lazer);
+            document.getElementById('resEntradas').textContent = `R$ ${formatarMoeda(entradas)}`;
+            document.getElementById('resCompras').textContent = `R$ ${formatarMoeda(compras)}`;
+            document.getElementById('resContas').textContent = `R$ ${formatarMoeda(contas)}`;
+            document.getElementById('resLazer').textContent = `R$ ${formatarMoeda(lazer)}`;
+            const saldoEl = document.getElementById('resSaldo');
+            saldoEl.textContent = `R$ ${formatarMoeda(saldo)}`;
+            saldoEl.className = 'resumo-valor ' + (saldo >= 0 ? 'positivo' : 'negativo');
+        }
+
+        // ========== UTILITÁRIOS ==========
+        function formatarMoeda(v) { return v.toFixed(2).replace('.', ','); }
+        function escapeHtml(t) { const d = document.createElement('div'); d.textContent = t; return d.innerHTML; }
 
         // ========== NAVEGAÇÃO E MÊS ==========
         document.getElementById('mesAnoFiltro').value = mesAnoAtual;
