@@ -10,7 +10,6 @@
         h1 { text-align: center; margin-bottom: 0.5rem; color: #1a1a2e; font-size: 1.8rem; }
         .user-info { text-align: center; font-size: 0.8rem; color: #888; margin-bottom: 1rem; }
 
-        /* Navegação */
         .tabs { display: flex; gap: 0.3rem; margin-bottom: 1rem; background: white; border-radius: 12px; padding: 0.4rem; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
         .tab-btn { flex: 1; padding: 0.6rem 0.2rem; border: none; background: transparent; border-radius: 10px; cursor: pointer; font-weight: 600; font-size: 0.8rem; color: #555; transition: all 0.2s; }
         .tab-btn.active { background: #2563eb; color: white; }
@@ -18,12 +17,10 @@
         .tab-content { display: none; }
         .tab-content.active { display: block; }
 
-        /* Seletor de mês */
         .mes-selector { display: flex; gap: 0.5rem; align-items: center; margin-bottom: 1rem; background: white; border-radius: 12px; padding: 0.7rem; box-shadow: 0 2px 8px rgba(0,0,0,0.04); }
         .mes-selector label { font-weight: 600; font-size: 0.9rem; }
         .mes-selector input { padding: 0.5rem; border: 1px solid #ddd; border-radius: 8px; }
 
-        /* Cards */
         .card { background: white; border-radius: 12px; padding: 1rem; margin-bottom: 1rem; box-shadow: 0 2px 8px rgba(0,0,0,0.04); }
         .row { display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center; }
         .row input, .row select { padding: 0.6rem; border: 1px solid #ddd; border-radius: 8px; font-size: 0.95rem; }
@@ -32,7 +29,6 @@
         .badge-credito { background: #fef3c7; color: #b45309; }
         .badge-debito { background: #dbeafe; color: #1e40af; }
 
-        /* Listas */
         .list-item { display: flex; justify-content: space-between; align-items: center; padding: 0.7rem 0; border-bottom: 1px solid #f1f1f1; }
         .item-info { flex: 1; }
         .item-actions { display: flex; gap: 0.3rem; }
@@ -44,7 +40,6 @@
         .save-btn { background: #15803d; color: white; padding: 0.3rem 0.7rem; border: none; border-radius: 6px; cursor: pointer; }
         .cancel-btn { background: #e5e7eb; color: #333; padding: 0.3rem 0.7rem; border: none; border-radius: 6px; cursor: pointer; }
 
-        /* Resumo */
         .resumo-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.8rem; }
         .resumo-item { background: #f8fafc; border-radius: 10px; padding: 1rem; }
         .resumo-label { font-size: 0.8rem; color: #666; margin-bottom: 0.3rem; }
@@ -52,7 +47,6 @@
         .positivo { color: #15803d; }
         .negativo { color: #b91c1c; }
 
-        /* Compras */
         .date-header { display: flex; align-items: center; padding: 0.5rem; border-radius: 8px; cursor: pointer; gap: 0.5rem; background: #f8fafc; margin-bottom: 0.3rem; }
         .date-arrow { font-size: 1.2rem; }
         .date-label { flex: 1; font-weight: 600; }
@@ -72,7 +66,6 @@
     <h1>💰 Gestão Financeira</h1>
     <div class="user-info" id="userStatus">Conectando...</div>
 
-    <!-- Navegação principal -->
     <div class="tabs">
         <button class="tab-btn active" data-tab="compras">🛒 Compras</button>
         <button class="tab-btn" data-tab="contas">📄 Contas</button>
@@ -80,7 +73,6 @@
         <button class="tab-btn" data-tab="resumo">📊 Resumo</button>
     </div>
 
-    <!-- Seletor de mês/ano (global para todas as guias) -->
     <div class="mes-selector">
         <label>📅 Período:</label>
         <input type="month" id="mesAnoFiltro">
@@ -159,20 +151,21 @@
         </div>
     </div>
 
-    <!-- Firebase SDKs -->
+    <!-- Firebase SDKs (versão compat) -->
     <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore-compat.js"></script>
 
     <script>
-        // ⚠️ SUBSTITUA com suas credenciais do Firebase
+        // 🔥 SUAS CREDENCIAIS DO FIREBASE
         const firebaseConfig = {
-            apiKey: "AIzaSy...",
-            authDomain: "seu-app.firebaseapp.com",
-            projectId: "seu-app",
-            storageBucket: "seu-app.appspot.com",
-            messagingSenderId: "000000000000",
-            appId: "1:000000000000:web:xxxxxxxxxxxxxxxxxxxx"
+            apiKey: "AIzaSyBfg7SfKe4kj1KItvsQ3Ngzi23ctH8kkJU",
+            authDomain: "gestaofincanceira.firebaseapp.com",
+            databaseURL: "https://gestaofincanceira-default-rtdb.firebaseio.com",
+            projectId: "gestaofincanceira",
+            storageBucket: "gestaofincanceira.firebasestorage.app",
+            messagingSenderId: "15243933186",
+            appId: "1:15243933186:web:16e853fbd02cfb37c9991b"
         };
 
         firebase.initializeApp(firebaseConfig);
@@ -182,17 +175,15 @@
         let userId = null;
         let mesAnoAtual = new Date().toISOString().slice(0,7); // "YYYY-MM"
 
-        // Dados locais espelho (para sincronização rápida)
+        // Dados locais espelho
         let itensCompras = [];
         let contasData = { entradas: 0, lista: [] };
         let lazerLista = [];
         let orcamento = 0;
 
-        // Para edição inline
         let contaEditIndex = -1;
         let lazerEditIndex = -1;
 
-        // Utilitários
         function formatarMoeda(v) { return v.toFixed(2).replace('.', ','); }
         function escapeHtml(t) { const d = document.createElement('div'); d.textContent = t; return d.innerHTML; }
 
@@ -201,10 +192,10 @@
         auth.onAuthStateChanged(user => {
             if (user) {
                 userId = user.uid;
-                document.getElementById('userStatus').textContent = '🟢 Dados na nuvem (seu ID anônimo)';
+                document.getElementById('userStatus').textContent = '🟢 Conectado à nuvem';
                 carregarTodosDados();
             } else {
-                document.getElementById('userStatus').textContent = '🔴 Não conectado. Recarregue a página.';
+                document.getElementById('userStatus').textContent = '🔴 Desconectado. Recarregue a página.';
             }
         });
 
@@ -212,22 +203,22 @@
         async function carregarTodosDados() {
             if (!userId) return;
             const mes = mesAnoAtual;
-            // Carregar compras do mês
+            // Compras
             const comprasSnap = await db.collection('usuarios').doc(userId).collection('compras').where('mesAno', '==', mes).get();
             itensCompras = comprasSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-            // Carregar contas do mês
+            // Contas
             const contasSnap = await db.collection('usuarios').doc(userId).collection('contas').where('mesAno', '==', mes).get();
             contasData.lista = contasSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-            // Carregar entradas (documento único)
+            // Meta (entradas e orçamento)
             const metaDoc = await db.collection('usuarios').doc(userId).collection('meta').doc('dados').get();
             if (metaDoc.exists) {
                 contasData.entradas = metaDoc.data().entradas || 0;
                 orcamento = metaDoc.data().orcamento || 0;
             }
-            // Carregar lazer do mês
+            // Lazer
             const lazerSnap = await db.collection('usuarios').doc(userId).collection('lazer').where('mesAno', '==', mes).get();
             lazerLista = lazerSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-            // Atualizar interface
+
             document.getElementById('entradas').value = contasData.entradas || '';
             document.getElementById('orcamento').value = orcamento || '';
             renderizarTodasGuias();
@@ -241,7 +232,6 @@
             }, { merge: true });
         }
 
-        // ========== RENDERIZAÇÃO ==========
         function renderizarTodasGuias() {
             renderizarCompras();
             renderizarContas();
@@ -250,9 +240,7 @@
         }
 
         // ---------- COMPRAS ----------
-        function calcSubtotal() {
-            return itensCompras.reduce((s, i) => s + (parseFloat(i.quantidade)||0) * (parseFloat(i.preco)||0), 0);
-        }
+        function calcSubtotal() { return itensCompras.reduce((s, i) => s + (parseFloat(i.quantidade)||0) * (parseFloat(i.preco)||0), 0); }
         function atualizarTotaisCompras() {
             const subtotal = calcSubtotal();
             document.getElementById('valorSubtotal').textContent = `R$ ${formatarMoeda(subtotal)}`;
@@ -268,7 +256,6 @@
                 atualizarTotaisCompras();
                 return;
             }
-            // Agrupar por dia
             const grupos = {};
             itensCompras.forEach(i => {
                 const dia = i.data.slice(0,10);
@@ -296,7 +283,6 @@
                 html += '</div></div>';
             });
             container.innerHTML = html;
-            // Eventos
             document.querySelectorAll('#tab-compras .toggle-details-btn').forEach(b => b.addEventListener('click', toggleDet));
             document.querySelectorAll('#tab-compras input[type="checkbox"]').forEach(cb => cb.addEventListener('change', flagItem));
             document.querySelectorAll('#tab-compras input[data-field]').forEach(inp => {
@@ -308,23 +294,13 @@
         async function salvarCompra(item, id) {
             if (!userId) return;
             const docRef = db.collection('usuarios').doc(userId).collection('compras').doc(id || undefined);
-            if (id) {
-                await docRef.update(item);
-            } else {
-                const newRef = await docRef.set(item);
-                // O id será gerado automaticamente, mas precisamos atualizar o item local
-            }
+            if (id) await docRef.update(item);
+            else await docRef.set(item);
         }
-        async function deletarCompra(id) {
-            if (!userId) return;
-            await db.collection('usuarios').doc(userId).collection('compras').doc(id).delete();
-        }
-
         function toggleDet(e) {
             e.stopPropagation();
             const idx = parseInt(e.currentTarget.dataset.idx);
             itensCompras[idx].expanded = !itensCompras[idx].expanded;
-            // Atualizar no Firestore
             const item = itensCompras[idx];
             salvarCompra({ expanded: item.expanded }, item.id);
             renderizarCompras();
@@ -618,7 +594,6 @@
             });
         });
 
-        // Suporte a Enter no campo produto
         document.addEventListener('keypress', e => {
             if (e.key === 'Enter' && document.activeElement?.id === 'produto') adicionarProduto();
         });
