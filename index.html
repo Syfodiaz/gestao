@@ -8,18 +8,17 @@
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body { font-family: 'Segoe UI', system-ui, sans-serif; background: #f0f2f5; padding: 1rem; max-width: 700px; margin: auto; }
 
-        /* Caixa de autenticação */
-        .auth-box { background: white; border-radius: 12px; padding: 1rem; margin-bottom: 1rem; box-shadow: 0 2px 8px rgba(0,0,0,0.08); display: flex; flex-direction: column; gap: 0.6rem; }
-        .auth-box h3 { margin-bottom: 0.2rem; font-size: 1rem; }
-        .auth-row { display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center; }
-        .auth-row input { padding: 0.6rem; border: 1px solid #ddd; border-radius: 8px; font-size: 0.95rem; flex: 1; min-width: 150px; }
-        .auth-row button { padding: 0.6rem 1rem; border: none; border-radius: 8px; cursor: pointer; font-weight: bold; }
-        .btn-signin { background: #2563eb; color: white; }
-        .btn-signup { background: #e5e7eb; color: #333; }
-        .auth-error { color: #dc3545; font-size: 0.85rem; }
+        /* Barra de autenticação fixa no topo */
+        .auth-bar { background: white; border-radius: 12px; padding: 0.6rem 1rem; margin-bottom: 1rem; box-shadow: 0 2px 8px rgba(0,0,0,0.06); display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
+        .auth-bar label { font-weight: 600; font-size: 0.85rem; }
+        .auth-bar input { padding: 0.5rem; border: 1px solid #ccc; border-radius: 8px; font-size: 0.9rem; width: 140px; }
+        .auth-bar button { padding: 0.5rem 1rem; border: none; border-radius: 8px; cursor: pointer; font-weight: bold; }
+        .btn-login { background: #2563eb; color: white; }
+        .btn-logout { background: #dc3545; color: white; }
+        .auth-msg { font-size: 0.8rem; color: #555; }
 
         h1 { text-align: center; margin-bottom: 0.5rem; color: #1a1a2e; font-size: 1.8rem; }
-        .user-info { text-align: center; font-size: 0.8rem; color: #888; margin-bottom: 1rem; }
+        .user-info { text-align: center; font-size: 0.85rem; color: #888; margin-bottom: 1rem; }
 
         .tabs { display: flex; gap: 0.3rem; margin-bottom: 1rem; background: white; border-radius: 12px; padding: 0.4rem; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
         .tab-btn { flex: 1; padding: 0.6rem 0.2rem; border: none; background: transparent; border-radius: 10px; cursor: pointer; font-weight: 600; font-size: 0.8rem; color: #555; transition: all 0.2s; }
@@ -72,27 +71,25 @@
         .conta-vencida { background-color: #ffe5e5; }
         .conta-vencida .item-info strong { color: #b91c1c; }
 
-        .main-app { display: none; }
-        .main-app.visible { display: block; }
+        .empty-message { text-align: center; color: #888; padding: 2rem; }
     </style>
 </head>
 <body>
-    <!-- Caixa de autenticação (aparece antes de logar) -->
-    <div id="authContainer" class="auth-box">
-        <h3>🔐 Acessar sua conta</h3>
-        <div class="auth-row">
-            <input type="email" id="authEmail" placeholder="E-mail">
-            <input type="password" id="authPassword" placeholder="Senha">
-            <button class="btn-signin" id="btnSignIn">Entrar</button>
-            <button class="btn-signup" id="btnSignUp">Criar conta</button>
-        </div>
-        <div class="auth-error" id="authError"></div>
+    <!-- Barra de autenticação sempre visível -->
+    <div class="auth-bar" id="authBar">
+        <label>🔐 E‑mail:</label>
+        <input type="email" id="authEmail" placeholder="seu@email.com">
+        <label>Senha:</label>
+        <input type="password" id="authPassword" placeholder="Senha">
+        <button class="btn-login" id="btnLogin">Entrar</button>
+        <button class="btn-logout" id="btnLogout" style="display:none;">Sair</button>
+        <span class="auth-msg" id="authMsg"></span>
     </div>
 
-    <!-- Conteúdo principal (oculto até autenticar) -->
-    <div id="mainApp" class="main-app">
+    <!-- Conteúdo principal (sempre visível) -->
+    <div id="mainApp">
         <h1>💰 Gestão Financeira</h1>
-        <div class="user-info" id="userStatus">Conectado</div>
+        <div class="user-info" id="userStatus">Faça login para ver seus dados</div>
 
         <div class="tabs">
             <button class="tab-btn active" data-tab="compras">🛒 Compras</button>
@@ -107,7 +104,7 @@
             <span style="font-size:0.8rem; color:#666;">(dados do mês)</span>
         </div>
 
-        <!-- Guias (mesmo conteúdo de antes) -->
+        <!-- Guias -->
         <div id="tab-compras" class="tab-content active">
             <div class="card row">
                 <label>💰 Orçamento:</label>
@@ -210,60 +207,59 @@
         let contaEditIndex = -1;
         let lazerEditIndex = -1;
 
-        const authContainer = document.getElementById('authContainer');
-        const mainApp = document.getElementById('mainApp');
-        const authError = document.getElementById('authError');
+        // Elementos da UI
+        const authEmail = document.getElementById('authEmail');
+        const authPassword = document.getElementById('authPassword');
+        const btnLogin = document.getElementById('btnLogin');
+        const btnLogout = document.getElementById('btnLogout');
+        const authMsg = document.getElementById('authMsg');
+        const userStatus = document.getElementById('userStatus');
 
         // ========== AUTENTICAÇÃO ==========
-        // Mostrar/esconder UI conforme estado de autenticação
+        // Atualiza a interface conforme estado de autenticação
         auth.onAuthStateChanged(user => {
             if (user) {
                 userId = user.uid;
-                document.getElementById('userStatus').textContent = `🟢 Logado como ${user.email}`;
-                authContainer.style.display = 'none';
-                mainApp.classList.add('visible');
+                userStatus.textContent = `🟢 Logado como ${user.email}`;
+                btnLogin.style.display = 'none';
+                btnLogout.style.display = 'inline-block';
+                authEmail.value = '';
+                authPassword.value = '';
+                authMsg.textContent = '';
                 carregarTodosDados();
             } else {
                 userId = null;
-                authContainer.style.display = 'block';
-                mainApp.classList.remove('visible');
+                userStatus.textContent = 'Faça login para ver seus dados';
+                btnLogin.style.display = 'inline-block';
+                btnLogout.style.display = 'none';
+                // Limpa as listas
+                itensCompras = [];
+                contasData.lista = [];
+                lazerLista = [];
+                orcamento = 0;
+                renderizarTodasGuias();
             }
         });
 
-        // Sign In
-        document.getElementById('btnSignIn').addEventListener('click', async () => {
-            const email = document.getElementById('authEmail').value.trim();
-            const password = document.getElementById('authPassword').value;
+        // Botão Entrar
+        btnLogin.addEventListener('click', async () => {
+            const email = authEmail.value.trim();
+            const password = authPassword.value;
             if (!email || !password) {
-                authError.textContent = 'Preencha e-mail e senha.';
+                authMsg.textContent = 'Preencha e‑mail e senha.';
                 return;
             }
             try {
                 await auth.signInWithEmailAndPassword(email, password);
-                authError.textContent = '';
+                authMsg.textContent = '';
             } catch (error) {
-                authError.textContent = 'Erro: ' + error.message;
+                authMsg.textContent = 'Erro: ' + error.message;
             }
         });
 
-        // Sign Up (criar nova conta)
-        document.getElementById('btnSignUp').addEventListener('click', async () => {
-            const email = document.getElementById('authEmail').value.trim();
-            const password = document.getElementById('authPassword').value;
-            if (!email || !password) {
-                authError.textContent = 'Preencha e-mail e senha.';
-                return;
-            }
-            if (password.length < 6) {
-                authError.textContent = 'Senha deve ter pelo menos 6 caracteres.';
-                return;
-            }
-            try {
-                await auth.createUserWithEmailAndPassword(email, password);
-                authError.textContent = '';
-            } catch (error) {
-                authError.textContent = 'Erro: ' + error.message;
-            }
+        // Botão Sair
+        btnLogout.addEventListener('click', async () => {
+            await auth.signOut();
         });
 
         // ========== CARREGAR / SALVAR ==========
@@ -281,6 +277,9 @@
                 if (metaDoc.exists) {
                     contasData.entradas = metaDoc.data().entradas || 0;
                     orcamento = metaDoc.data().orcamento || 0;
+                } else {
+                    contasData.entradas = 0;
+                    orcamento = 0;
                 }
 
                 const lazerSnap = await db.collection('usuarios').doc(userId).collection('lazer').where('mesAno', '==', mes).get();
@@ -291,7 +290,9 @@
                 renderizarTodasGuias();
             } catch (error) {
                 console.error('Erro ao carregar:', error);
-                alert('Erro ao carregar dados.');
+                userStatus.textContent = '🔴 Erro ao carregar dados. Verifique sua conexão ou as permissões.';
+                // Mesmo assim renderiza vazio
+                renderizarTodasGuias();
             }
         }
 
@@ -322,8 +323,12 @@
         }
         function renderizarCompras() {
             const container = document.getElementById('listaCompras');
+            if (!userId) {
+                container.innerHTML = '<div class="empty-message">Faça login para ver suas compras.</div>';
+                return;
+            }
             if (itensCompras.length === 0) {
-                container.innerHTML = '<div style="text-align:center;color:#888;padding:2rem;">Nenhum item neste mês.</div>';
+                container.innerHTML = '<div class="empty-message">Nenhum item neste mês.</div>';
                 atualizarTotaisCompras();
                 return;
             }
@@ -364,7 +369,7 @@
         }
 
         async function salvarCompra(item, id) {
-            if (!userId) return alert('Autenticação requerida.');
+            if (!userId) return alert('Faça login primeiro.');
             const docRef = db.collection('usuarios').doc(userId).collection('compras').doc(id || undefined);
             if (id) await docRef.update(item);
             else await docRef.set(item);
@@ -393,8 +398,12 @@
         function totalContas() { return contasData.lista.reduce((s, c) => s + (parseFloat(c.valor)||0), 0); }
         function renderizarContas() {
             const container = document.getElementById('listaContas');
+            if (!userId) {
+                container.innerHTML = '<div class="empty-message">Faça login para ver suas contas.</div>';
+                return;
+            }
             if (contasData.lista.length === 0) {
-                container.innerHTML = '<div style="text-align:center;color:#888;padding:1rem;">Nenhuma conta neste mês.</div>';
+                container.innerHTML = '<div class="empty-message">Nenhuma conta neste mês.</div>';
             } else {
                 const grupos = {};
                 contasData.lista.forEach(c => { const venc = c.vencimento || 'sem_vencimento'; if (!grupos[venc]) grupos[venc] = []; grupos[venc].push(c); });
@@ -489,8 +498,12 @@
         function totalLazer() { return lazerLista.reduce((s, l) => s + (parseFloat(l.valor)||0), 0); }
         function renderizarLazer() {
             const container = document.getElementById('listaLazer');
+            if (!userId) {
+                container.innerHTML = '<div class="empty-message">Faça login para ver seus gastos de lazer.</div>';
+                return;
+            }
             if (lazerLista.length === 0) {
-                container.innerHTML = '<div style="text-align:center;color:#888;padding:1rem;">Nenhum lazer neste mês.</div>';
+                container.innerHTML = '<div class="empty-message">Nenhum lazer neste mês.</div>';
             } else {
                 let html = '';
                 lazerLista.forEach((l, i) => {
@@ -551,6 +564,14 @@
 
         // ========== RESUMO ==========
         function atualizarResumo() {
+            if (!userId) {
+                document.getElementById('resEntradas').textContent = 'R$ 0,00';
+                document.getElementById('resCompras').textContent = 'R$ 0,00';
+                document.getElementById('resContas').textContent = 'R$ 0,00';
+                document.getElementById('resLazer').textContent = 'R$ 0,00';
+                document.getElementById('resSaldo').textContent = 'R$ 0,00';
+                return;
+            }
             const entradas = contasData.entradas || 0;
             const compras = calcSubtotal();
             const contas = totalContas();
@@ -571,7 +592,7 @@
 
         // ========== NAVEGAÇÃO E MÊS ==========
         document.getElementById('mesAnoFiltro').value = mesAnoAtual;
-        document.getElementById('mesAnoFiltro').addEventListener('change', function() { mesAnoAtual = this.value; carregarTodosDados(); });
+        document.getElementById('mesAnoFiltro').addEventListener('change', function() { mesAnoAtual = this.value; if (userId) carregarTodosDados(); });
 
         document.querySelectorAll('.tab-btn').forEach(btn => {
             btn.addEventListener('click', function() {
