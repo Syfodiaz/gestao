@@ -516,4 +516,139 @@
             const nome = document.getElementById('editContaNome').value.trim();
             const valor = parseFloat(document.getElementById('editContaValor').value)||0;
             const venc = document.getElementById('editContaVenc').value;
-            const parc = document.getElementById('
+            const parc = document.getElementById('editContaParc').checked;
+            const parcelas = parc ? (parseInt(document.getElementById('editContaParcelas').value)||1) : null;
+            if(!nome || valor<=0) return alert('Preencha nome e valor.');
+            const atualizado = { nome, valor, vencimento: venc, parcelado: parc, parcelas };
+            await db.collection('usuarios').doc(userId).collection('contas').doc(contasData.lista[idx].id).update(atualizado);
+            Object.assign(contasData.lista[idx], atualizado);
+            contaEditIndex = -1;
+            renderizarContas();
+            atualizarResumo();
+        }
+        
+        document.getElementById('addConta').addEventListener('click', adicionarConta);
+        document.getElementById('contaParcelado').addEventListener('change', function() { document.getElementById('parcelaContainer').style.display = this.checked ? 'inline-block' : 'none'; });
+        document.getElementById('entradas').addEventListener('input', function() { contasData.entradas = parseFloat(this.value)||0; salvarMeta(); renderizarContas(); atualizarResumo(); });
+
+        // Lazer
+        function totalLazer() { return lazerLista.reduce((s, l) => s + (parseFloat(l.valor)||0), 0); }
+        function renderizarLazer() {
+            const container = document.getElementById('listaLazer');
+            if (!userId) { container.innerHTML = '<div class="empty-message">Faça login para ver seus gastos de lazer.</div>'; return; }
+            if (lazerLista.length === 0) { container.innerHTML = '<div class="empty-message">Nenhum lazer neste mês.</div>'; }
+            else {
+                let html = '';
+                lazerLista.forEach((l, i) => {
+                    if (i === lazerEditIndex) {
+                        html += `<div class="list-item"><div class="edit-form">
+                            <input type="text" id="editLazerDesc" value="${escapeHtml(l.descricao)}" style="width:110px;">
+                            <input type="number" id="editLazerValor" value="${parseFloat(l.valor)||0}" style="width:80px;">
+                            <select id="editLazerPag"><option value="debito" ${l.pagamento==='debito'?'selected':''}>Débito</option><option value="credito" ${l.pagamento==='credito'?'selected':''}>Crédito</option></select>
+                            <button class="save-btn" data-idx="${i}">Salvar</button>
+                            <button class="cancel-btn">Cancelar</button>
+                        </div></div>`;
+                    } else {
+                        const badgeCls = l.pagamento==='credito'?'badge-credito':'badge-debito';
+                        const txtPag = l.pagamento==='credito'?'Crédito':'Débito';
+                        html += `<div class="list-item" style="background:${l.pagamento==='credito'?'#fff9e6':'white'}">
+                            <div class="item-info"><strong>${escapeHtml(l.descricao)}</strong> - R$ ${formatarMoeda(l.valor)}<br><small><span class="badge ${badgeCls}">${txtPag}</span></small></div>
+                            <div class="item-actions"><button class="edit-btn" data-idx="${i}">✏️</button><button class="delete-btn" data-id="${l.id}">🗑️</button></div>
+                        </div>`;
+                    }
+                });
+                container.innerHTML = html;
+                document.querySelectorAll('#tab-lazer .edit-btn').forEach(b => b.addEventListener('click', () => { lazerEditIndex = parseInt(b.dataset.idx); renderizarLazer(); }));
+                document.querySelectorAll('#tab-lazer .delete-btn').forEach(b => b.addEventListener('click', deletarLazer));
+                document.querySelectorAll('#tab-lazer .save-btn').forEach(b => b.addEventListener('click', salvarEdicaoLazer));
+                document.querySelectorAll('#tab-lazer .cancel-btn').forEach(b => b.addEventListener('click', () => { lazerEditIndex = -1; renderizarLazer(); }));
+            }
+            document.getElementById('totalLazer').textContent = `R$ ${formatarMoeda(totalLazer())}`;
+        }
+        
+        async function adicionarLazer() {
+            if (!userId) { alert('Faça login.'); return; }
+            const desc = document.getElementById('lazerDescricao').value.trim();
+            const valor = parseFloat(document.getElementById('lazerValor').value)||0;
+            const pag = document.getElementById('lazerPagamento').value;
+            if(!desc || valor<=0) { alert('Preencha descrição e valor.'); return; }
+            try {
+                const novo = { descricao: desc, valor, pagamento: pag, data: new Date().toISOString(), mesAno: mesAnoAtual };
+                const docRef = await db.collection('usuarios').doc(userId).collection('lazer').add(novo);
+                novo.id = docRef.id;
+                lazerLista.push(novo);
+                renderizarLazer();
+                document.getElementById('lazerDescricao').value=''; document.getElementById('lazerValor').value='';
+                atualizarResumo();
+            } catch (e) { console.error(e); alert('Erro ao adicionar lazer.'); }
+        }
+        
+        async function deletarLazer(e) { 
+            if (!userId) return;
+            if (!confirm('Tem certeza que deseja excluir este item de lazer?')) return;
+            await db.collection('usuarios').doc(userId).collection('lazer').doc(e.currentTarget.dataset.id).delete(); 
+            lazerLista = lazerLista.filter(l => l.id !== e.currentTarget.dataset.id); 
+            renderizarLazer(); 
+            atualizarResumo();
+        }
+        
+        async function salvarEdicaoLazer(e) {
+            const idx = parseInt(e.currentTarget.dataset.idx);
+            const desc = document.getElementById('editLazerDesc').value.trim();
+            const valor = parseFloat(document.getElementById('editLazerValor').value)||0;
+            const pag = document.getElementById('editLazerPag').value;
+            if(!desc || valor<=0) return alert('Preencha descrição e valor.');
+            const atualizado = { descricao: desc, valor, pagamento: pag };
+            await db.collection('usuarios').doc(userId).collection('lazer').doc(lazerLista[idx].id).update(atualizado);
+            Object.assign(lazerLista[idx], atualizado);
+            lazerEditIndex = -1;
+            renderizarLazer();
+            atualizarResumo();
+        }
+        
+        document.getElementById('addLazer').addEventListener('click', adicionarLazer);
+
+        // Resumo
+        function atualizarResumo() {
+            if (!userId) {
+                document.getElementById('resEntradas').textContent = 'R$ 0,00';
+                document.getElementById('resCompras').textContent = 'R$ 0,00';
+                document.getElementById('resContas').textContent = 'R$ 0,00';
+                document.getElementById('resLazer').textContent = 'R$ 0,00';
+                document.getElementById('resSaldo').textContent = 'R$ 0,00';
+                return;
+            }
+            const entradas = contasData.entradas || 0;
+            const compras = calcSubtotal();
+            const contas = totalContas();
+            const lazer = totalLazer();
+            const saldo = entradas - (compras + contas + lazer);
+            document.getElementById('resEntradas').textContent = `R$ ${formatarMoeda(entradas)}`;
+            document.getElementById('resCompras').textContent = `R$ ${formatarMoeda(compras)}`;
+            document.getElementById('resContas').textContent = `R$ ${formatarMoeda(contas)}`;
+            document.getElementById('resLazer').textContent = `R$ ${formatarMoeda(lazer)}`;
+            const saldoEl = document.getElementById('resSaldo');
+            saldoEl.textContent = `R$ ${formatarMoeda(saldo)}`;
+            saldoEl.className = 'resumo-valor ' + (saldo >= 0 ? 'positivo' : 'negativo');
+        }
+
+        // Utils
+        function formatarMoeda(v) { return v.toFixed(2).replace('.', ','); }
+        function escapeHtml(t) { const d = document.createElement('div'); d.textContent = t; return d.innerHTML; }
+
+        // Navegação
+        document.getElementById('mesAnoFiltro').value = mesAnoAtual;
+        document.getElementById('mesAnoFiltro').addEventListener('change', function() { mesAnoAtual = this.value; if (userId) carregarTodosDados(); });
+        document.querySelectorAll('.tab-btn').forEach(btn => {
+            btn.addEventListener('click', function() {
+                document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+                this.classList.add('active');
+                document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+                document.getElementById('tab-' + this.dataset.tab).classList.add('active');
+                if (this.dataset.tab === 'resumo') atualizarResumo();
+            });
+        });
+        document.addEventListener('keypress', e => { if (e.key === 'Enter' && document.activeElement?.id === 'produto') adicionarProduto(); });
+    </script>
+</body>
+</html>
