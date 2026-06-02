@@ -65,7 +65,8 @@
         .date-group:not(.open) .date-items { max-height: 0; }
         .item-header { display: flex; align-items: center; padding: 0.5rem; gap: 0.5rem; }
         .item-name { flex: 1; }
-        .toggle-details-btn { background: none; border: none; cursor: pointer; font-size: 1.2rem; }
+        .toggle-details-btn { background: none; border: none; cursor: pointer; font-size: 1.2rem; margin-left: 0.5rem; }
+        .delete-item-btn { background: none; border: none; cursor: pointer; font-size: 1.1rem; color: #dc3545; margin-left: 0.5rem; }
 
         .conta-vencida { background-color: #ffe5e5; }
         .conta-vencida .item-info strong { color: #b91c1c; }
@@ -175,7 +176,7 @@
     <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore-compat.js"></script>
 
     <script>
-        // 🔥 Configuração do Firebase (substitua se necessário)
+        // 🔥 Configuração do Firebase
         const firebaseConfig = {
             apiKey: "AIzaSyBfg7SfKe4kj1KItvsQ3Ngzi23ctH8kkJU",
             authDomain: "gestaofincanceira.firebaseapp.com",
@@ -291,10 +292,29 @@
             el.textContent = `R$ ${formatarMoeda(saldo)}`;
             el.style.color = saldo < 0 ? '#dc3545' : '#15803d';
         }
+        
+        // Função para deletar compra
+        async function deletarCompra(itemId) {
+            if (!userId) return;
+            if (!confirm('Tem certeza que deseja excluir este item?')) return;
+            try {
+                await db.collection('usuarios').doc(userId).collection('compras').doc(itemId).delete();
+                // Remove da lista local
+                itensCompras = itensCompras.filter(item => item.id !== itemId);
+                renderizarCompras();
+                atualizarResumo();
+            } catch (error) {
+                console.error('Erro ao deletar compra:', error);
+                alert('Erro ao excluir item. Tente novamente.');
+            }
+        }
+
         function renderizarCompras() {
             const container = document.getElementById('listaCompras');
             if (!userId) { container.innerHTML = '<div class="empty-message">Faça login para ver suas compras.</div>'; return; }
             if (itensCompras.length === 0) { container.innerHTML = '<div class="empty-message">Nenhum item neste mês.</div>'; atualizarTotaisCompras(); return; }
+            
+            // Agrupar por data
             const grupos = {};
             itensCompras.forEach(i => { const dia = i.data.slice(0,10); if (!grupos[dia]) grupos[dia] = []; grupos[dia].push(i); });
             const chaves = Object.keys(grupos).sort((a,b) => b.localeCompare(a));
@@ -303,49 +323,115 @@
                 const items = grupos[dia];
                 const dataFmt = new Date(dia+'T00:00:00').toLocaleDateString('pt-BR');
                 const totGrupo = items.reduce((s, i) => s + (parseFloat(i.quantidade)||0)*(parseFloat(i.preco)||0), 0);
-                html += `<div class="date-group open" data-dia="${dia}"><div class="date-header"><span class="date-arrow">▼</span><span class="date-label">${dataFmt}</span>${totGrupo>0?`<span class="date-total">R$ ${formatarMoeda(totGrupo)}</span>`:''}</div><div class="date-items">`;
+                html += `<div class="date-group open" data-dia="${dia}">
+                            <div class="date-header">
+                                <span class="date-arrow">▼</span>
+                                <span class="date-label">${dataFmt}</span>
+                                ${totGrupo>0?`<span class="date-total">R$ ${formatarMoeda(totGrupo)}</span>`:''}
+                            </div>
+                            <div class="date-items">`;
                 items.forEach(item => {
                     const idx = itensCompras.indexOf(item);
                     const qtd = item.quantidade != null ? item.quantidade : '';
                     const prc = item.preco != null ? Number(item.preco).toFixed(2) : '';
-                    const flg = item.flagged; const exp = item.expanded || false;
+                    const flg = item.flagged; 
+                    const exp = item.expanded || false;
                     const toggleBtn = flg ? `<button class="toggle-details-btn" data-idx="${idx}">${exp?'▲':'▼'}</button>` : '';
-                    const detHtml = (flg && exp) ? `<div style="padding:0.5rem 2rem;background:#f9fafb;display:flex;gap:1rem;"><span>📦 Qtd <input type="number" value="${qtd}" data-idx="${idx}" data-field="quantidade" step="1" min="0" style="width:70px;"></span><span>💰 R$ <input type="number" value="${prc}" data-idx="${idx}" data-field="preco" step="0.01" min="0" style="width:90px;"></span></div>` : '';
-                    html += `<div class="item-header"><input type="checkbox" ${flg?'checked':''} data-idx="${idx}"><span class="item-name">${escapeHtml(item.produto)}</span>${toggleBtn}</div>${detHtml}`;
+                    
+                    html += `<div class="item-header">
+                                <input type="checkbox" ${flg?'checked':''} data-idx="${idx}">
+                                <span class="item-name">${escapeHtml(item.produto)}</span>
+                                ${toggleBtn}
+                                <button class="delete-item-btn" data-id="${item.id}">🗑️</button>
+                            </div>`;
+                    
+                    if (flg && exp) {
+                        html += `<div style="padding:0.5rem 2rem;background:#f9fafb;display:flex;gap:1rem;">
+                                    <span>📦 Qtd <input type="number" value="${qtd}" data-idx="${idx}" data-field="quantidade" step="1" min="0" style="width:70px;"></span>
+                                    <span>💰 R$ <input type="number" value="${prc}" data-idx="${idx}" data-field="preco" step="0.01" min="0" style="width:90px;"></span>
+                                </div>`;
+                    }
                 });
                 html += '</div></div>';
             });
             container.innerHTML = html;
+            
+            // Event listeners
             document.querySelectorAll('#tab-compras .toggle-details-btn').forEach(b => b.addEventListener('click', toggleDet));
             document.querySelectorAll('#tab-compras input[type="checkbox"]').forEach(cb => cb.addEventListener('change', flagItem));
-            document.querySelectorAll('#tab-compras input[data-field]').forEach(inp => { inp.addEventListener('change', updateDet); inp.addEventListener('blur', updateDet); });
+            document.querySelectorAll('#tab-compras input[data-field]').forEach(inp => { 
+                inp.addEventListener('change', updateDet); 
+                inp.addEventListener('blur', updateDet); 
+            });
+            document.querySelectorAll('#tab-compras .delete-item-btn').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    const id = e.currentTarget.getAttribute('data-id');
+                    deletarCompra(id);
+                });
+            });
+            
             atualizarTotaisCompras();
         }
-        async function salvarCompra(item, id) {
-            if (!userId) return alert('Faça login primeiro.');
-            const docRef = db.collection('usuarios').doc(userId).collection('compras').doc(id || undefined);
-            try { if (id) await docRef.update(item); else await docRef.set(item); } catch (e) { console.error(e); alert('Erro ao salvar compra.'); }
+        
+        function toggleDet(e) { 
+            e.stopPropagation(); 
+            const idx = parseInt(e.currentTarget.dataset.idx); 
+            itensCompras[idx].expanded = !itensCompras[idx].expanded; 
+            salvarCompra({ expanded: itensCompras[idx].expanded }, itensCompras[idx].id); 
+            renderizarCompras(); 
         }
-        function toggleDet(e) { e.stopPropagation(); const idx = parseInt(e.currentTarget.dataset.idx); itensCompras[idx].expanded = !itensCompras[idx].expanded; salvarCompra({ expanded: itensCompras[idx].expanded }, itensCompras[idx].id); renderizarCompras(); }
-        function flagItem(e) { const idx = parseInt(e.target.dataset.idx); itensCompras[idx].flagged = e.target.checked; if (!e.target.checked) itensCompras[idx].expanded = false; salvarCompra({ flagged: itensCompras[idx].flagged, expanded: itensCompras[idx].expanded }, itensCompras[idx].id); renderizarCompras(); }
-        function updateDet(e) { const idx = parseInt(e.target.dataset.idx); const campo = e.target.dataset.field; let val = e.target.value.trim(); const item = itensCompras[idx]; if (campo === 'quantidade') item.quantidade = val === '' ? null : Number(val); else if (campo === 'preco') item.preco = val === '' ? null : Number(val).toFixed(2); salvarCompra({ [campo]: item[campo] }, item.id); atualizarTotaisCompras(); }
+        
+        function flagItem(e) { 
+            const idx = parseInt(e.target.dataset.idx); 
+            itensCompras[idx].flagged = e.target.checked; 
+            if (!e.target.checked) itensCompras[idx].expanded = false; 
+            salvarCompra({ flagged: itensCompras[idx].flagged, expanded: itensCompras[idx].expanded }, itensCompras[idx].id); 
+            renderizarCompras(); 
+        }
+        
+        function updateDet(e) { 
+            const idx = parseInt(e.target.dataset.idx); 
+            const campo = e.target.dataset.field; 
+            let val = e.target.value.trim(); 
+            const item = itensCompras[idx]; 
+            if (campo === 'quantidade') item.quantidade = val === '' ? null : Number(val); 
+            else if (campo === 'preco') item.preco = val === '' ? null : Number(val).toFixed(2); 
+            salvarCompra({ [campo]: item[campo] }, item.id); 
+            atualizarTotaisCompras(); 
+        }
+        
+        async function salvarCompra(item, id) {
+            if (!userId) return;
+            const docRef = db.collection('usuarios').doc(userId).collection('compras').doc(id || undefined);
+            try { if (id) await docRef.update(item); else await docRef.set(item); } catch (e) { console.error(e); }
+        }
+        
         async function adicionarProduto() {
             if (!userId) { alert('Faça login primeiro.'); return; }
             const nome = document.getElementById('produto').value.trim();
             if (!nome) { alert('Nome do produto obrigatório.'); return; }
-            const novoItem = { produto: nome, quantidade: null, preco: null, data: new Date().toISOString(), mesAno: mesAnoAtual, flagged: false, expanded: false };
+            const novoItem = { 
+                produto: nome, 
+                quantidade: null, 
+                preco: null, 
+                data: new Date().toISOString(), 
+                mesAno: mesAnoAtual, 
+                flagged: false, 
+                expanded: false 
+            };
             try {
                 const docRef = await db.collection('usuarios').doc(userId).collection('compras').add(novoItem);
                 novoItem.id = docRef.id;
                 itensCompras.push(novoItem);
                 renderizarCompras();
                 document.getElementById('produto').value = '';
-            } catch (e) { console.error(e); alert('Erro ao adicionar produto. Ative a API Firestore.'); }
+            } catch (e) { console.error(e); alert('Erro ao adicionar produto.'); }
         }
+        
         document.getElementById('adicionar').addEventListener('click', adicionarProduto);
         document.getElementById('orcamento').addEventListener('input', function() { orcamento = parseFloat(this.value) || 0; salvarMeta(); atualizarTotaisCompras(); });
 
-        // Contas (resumido, mesma lógica de adicionar com tratamento de erro)
+        // Contas
         function totalContas() { return contasData.lista.reduce((s, c) => s + (parseFloat(c.valor)||0), 0); }
         function renderizarContas() {
             const container = document.getElementById('listaContas');
@@ -395,6 +481,7 @@
             document.getElementById('totalContas').textContent = `R$ ${formatarMoeda(totalContas())}`;
             document.getElementById('restanteContas').textContent = `R$ ${formatarMoeda((contasData.entradas||0) - totalContas())}`;
         }
+        
         async function adicionarConta() {
             if (!userId) { alert('Faça login.'); return; }
             const nome = document.getElementById('contaNome').value.trim();
@@ -414,130 +501,19 @@
                 document.getElementById('contaParcelas').value=''; document.getElementById('parcelaContainer').style.display='none';
             } catch (e) { console.error(e); alert('Erro ao adicionar conta.'); }
         }
-        async function deletarConta(e) { if (!userId) return; await db.collection('usuarios').doc(userId).collection('contas').doc(e.currentTarget.dataset.id).delete(); contasData.lista = contasData.lista.filter(c => c.id !== e.currentTarget.dataset.id); renderizarContas(); }
+        
+        async function deletarConta(e) { 
+            if (!userId) return; 
+            if (!confirm('Tem certeza que deseja excluir esta conta?')) return;
+            await db.collection('usuarios').doc(userId).collection('contas').doc(e.currentTarget.dataset.id).delete(); 
+            contasData.lista = contasData.lista.filter(c => c.id !== e.currentTarget.dataset.id); 
+            renderizarContas(); 
+            atualizarResumo();
+        }
+        
         async function salvarEdicaoConta(e) {
             const idx = parseInt(e.currentTarget.dataset.idx);
             const nome = document.getElementById('editContaNome').value.trim();
             const valor = parseFloat(document.getElementById('editContaValor').value)||0;
             const venc = document.getElementById('editContaVenc').value;
-            const parc = document.getElementById('editContaParc').checked;
-            const parcelas = parc ? (parseInt(document.getElementById('editContaParcelas').value)||1) : null;
-            if(!nome || valor<=0) return alert('Preencha nome e valor.');
-            const atualizado = { nome, valor, vencimento: venc, parcelado: parc, parcelas };
-            await db.collection('usuarios').doc(userId).collection('contas').doc(contasData.lista[idx].id).update(atualizado);
-            Object.assign(contasData.lista[idx], atualizado);
-            contaEditIndex = -1;
-            renderizarContas();
-        }
-        document.getElementById('addConta').addEventListener('click', adicionarConta);
-        document.getElementById('contaParcelado').addEventListener('change', function() { document.getElementById('parcelaContainer').style.display = this.checked ? 'inline-block' : 'none'; });
-        document.getElementById('entradas').addEventListener('input', function() { contasData.entradas = parseFloat(this.value)||0; salvarMeta(); renderizarContas(); });
-
-        // Lazer (resumido)
-        function totalLazer() { return lazerLista.reduce((s, l) => s + (parseFloat(l.valor)||0), 0); }
-        function renderizarLazer() {
-            const container = document.getElementById('listaLazer');
-            if (!userId) { container.innerHTML = '<div class="empty-message">Faça login para ver seus gastos de lazer.</div>'; return; }
-            if (lazerLista.length === 0) { container.innerHTML = '<div class="empty-message">Nenhum lazer neste mês.</div>'; }
-            else {
-                let html = '';
-                lazerLista.forEach((l, i) => {
-                    if (i === lazerEditIndex) {
-                        html += `<div class="list-item"><div class="edit-form">
-                            <input type="text" id="editLazerDesc" value="${escapeHtml(l.descricao)}" style="width:110px;">
-                            <input type="number" id="editLazerValor" value="${parseFloat(l.valor)||0}" style="width:80px;">
-                            <select id="editLazerPag"><option value="debito" ${l.pagamento==='debito'?'selected':''}>Débito</option><option value="credito" ${l.pagamento==='credito'?'selected':''}>Crédito</option></select>
-                            <button class="save-btn" data-idx="${i}">Salvar</button>
-                            <button class="cancel-btn">Cancelar</button>
-                        </div></div>`;
-                    } else {
-                        const badgeCls = l.pagamento==='credito'?'badge-credito':'badge-debito';
-                        const txtPag = l.pagamento==='credito'?'Crédito':'Débito';
-                        html += `<div class="list-item" style="background:${l.pagamento==='credito'?'#fff9e6':'white'}">
-                            <div class="item-info"><strong>${escapeHtml(l.descricao)}</strong> - R$ ${formatarMoeda(l.valor)}<br><small><span class="badge ${badgeCls}">${txtPag}</span></small></div>
-                            <div class="item-actions"><button class="edit-btn" data-idx="${i}">✏️</button><button class="delete-btn" data-id="${l.id}">🗑️</button></div>
-                        </div>`;
-                    }
-                });
-                container.innerHTML = html;
-                document.querySelectorAll('#tab-lazer .edit-btn').forEach(b => b.addEventListener('click', () => { lazerEditIndex = parseInt(b.dataset.idx); renderizarLazer(); }));
-                document.querySelectorAll('#tab-lazer .delete-btn').forEach(b => b.addEventListener('click', deletarLazer));
-                document.querySelectorAll('#tab-lazer .save-btn').forEach(b => b.addEventListener('click', salvarEdicaoLazer));
-                document.querySelectorAll('#tab-lazer .cancel-btn').forEach(b => b.addEventListener('click', () => { lazerEditIndex = -1; renderizarLazer(); }));
-            }
-            document.getElementById('totalLazer').textContent = `R$ ${formatarMoeda(totalLazer())}`;
-        }
-        async function adicionarLazer() {
-            if (!userId) { alert('Faça login.'); return; }
-            const desc = document.getElementById('lazerDescricao').value.trim();
-            const valor = parseFloat(document.getElementById('lazerValor').value)||0;
-            const pag = document.getElementById('lazerPagamento').value;
-            if(!desc || valor<=0) { alert('Preencha descrição e valor.'); return; }
-            try {
-                const novo = { descricao: desc, valor, pagamento: pag, data: new Date().toISOString(), mesAno: mesAnoAtual };
-                const docRef = await db.collection('usuarios').doc(userId).collection('lazer').add(novo);
-                novo.id = docRef.id;
-                lazerLista.push(novo);
-                renderizarLazer();
-                document.getElementById('lazerDescricao').value=''; document.getElementById('lazerValor').value='';
-            } catch (e) { console.error(e); alert('Erro ao adicionar lazer.'); }
-        }
-        async function deletarLazer(e) { if (!userId) return; await db.collection('usuarios').doc(userId).collection('lazer').doc(e.currentTarget.dataset.id).delete(); lazerLista = lazerLista.filter(l => l.id !== e.currentTarget.dataset.id); renderizarLazer(); }
-        async function salvarEdicaoLazer(e) {
-            const idx = parseInt(e.currentTarget.dataset.idx);
-            const desc = document.getElementById('editLazerDesc').value.trim();
-            const valor = parseFloat(document.getElementById('editLazerValor').value)||0;
-            const pag = document.getElementById('editLazerPag').value;
-            if(!desc || valor<=0) return alert('Preencha descrição e valor.');
-            const atualizado = { descricao: desc, valor, pagamento: pag };
-            await db.collection('usuarios').doc(userId).collection('lazer').doc(lazerLista[idx].id).update(atualizado);
-            Object.assign(lazerLista[idx], atualizado);
-            lazerEditIndex = -1;
-            renderizarLazer();
-        }
-        document.getElementById('addLazer').addEventListener('click', adicionarLazer);
-
-        // Resumo
-        function atualizarResumo() {
-            if (!userId) {
-                document.getElementById('resEntradas').textContent = 'R$ 0,00';
-                document.getElementById('resCompras').textContent = 'R$ 0,00';
-                document.getElementById('resContas').textContent = 'R$ 0,00';
-                document.getElementById('resLazer').textContent = 'R$ 0,00';
-                document.getElementById('resSaldo').textContent = 'R$ 0,00';
-                return;
-            }
-            const entradas = contasData.entradas || 0;
-            const compras = calcSubtotal();
-            const contas = totalContas();
-            const lazer = totalLazer();
-            const saldo = entradas - (compras + contas + lazer);
-            document.getElementById('resEntradas').textContent = `R$ ${formatarMoeda(entradas)}`;
-            document.getElementById('resCompras').textContent = `R$ ${formatarMoeda(compras)}`;
-            document.getElementById('resContas').textContent = `R$ ${formatarMoeda(contas)}`;
-            document.getElementById('resLazer').textContent = `R$ ${formatarMoeda(lazer)}`;
-            const saldoEl = document.getElementById('resSaldo');
-            saldoEl.textContent = `R$ ${formatarMoeda(saldo)}`;
-            saldoEl.className = 'resumo-valor ' + (saldo >= 0 ? 'positivo' : 'negativo');
-        }
-
-        // Utils
-        function formatarMoeda(v) { return v.toFixed(2).replace('.', ','); }
-        function escapeHtml(t) { const d = document.createElement('div'); d.textContent = t; return d.innerHTML; }
-
-        // Navegação
-        document.getElementById('mesAnoFiltro').value = mesAnoAtual;
-        document.getElementById('mesAnoFiltro').addEventListener('change', function() { mesAnoAtual = this.value; if (userId) carregarTodosDados(); });
-        document.querySelectorAll('.tab-btn').forEach(btn => {
-            btn.addEventListener('click', function() {
-                document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-                this.classList.add('active');
-                document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
-                document.getElementById('tab-' + this.dataset.tab).classList.add('active');
-                if (this.dataset.tab === 'resumo') atualizarResumo();
-            });
-        });
-        document.addEventListener('keypress', e => { if (e.key === 'Enter' && document.activeElement?.id === 'produto') adicionarProduto(); });
-    </script>
-</body>
-</html>
+            const parc = document.getElementById('
