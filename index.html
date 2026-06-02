@@ -1,400 +1,543 @@
-// ========== Firebase e Auth ==========
-const firebaseConfig = {
-    apiKey: "AIzaSyBfg7SfKe4kj1KItvsQ3Ngzi23ctH8kkJU",
-    authDomain: "gestaofincanceira.firebaseapp.com",
-    databaseURL: "https://gestaofincanceira-default-rtdb.firebaseio.com",
-    projectId: "gestaofincanceira",
-    storageBucket: "gestaofincanceira.firebasestorage.app",
-    messagingSenderId: "15243933186",
-    appId: "1:15243933186:web:16e853fbd02cfb37c9991b"
-};
-firebase.initializeApp(firebaseConfig);
-const auth = firebase.auth();
-const db = firebase.firestore();
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gestão Financeira Pessoal</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: 'Segoe UI', system-ui, sans-serif; background: #f0f2f5; padding: 1rem; max-width: 700px; margin: auto; }
 
-let userId = null;
-let mesAnoAtual = new Date().toISOString().slice(0,7);
-let itensCompras = [];
-let contasData = { entradas: 0, lista: [] };
-let lazerLista = [];
-let orcamento = 0;
-let contaEditIndex = -1;
-let lazerEditIndex = -1;
+        .auth-bar { background: white; border-radius: 12px; padding: 0.6rem 1rem; margin-bottom: 1rem; box-shadow: 0 2px 8px rgba(0,0,0,0.06); display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
+        .auth-bar label { font-weight: 600; font-size: 0.85rem; }
+        .auth-bar input { padding: 0.5rem; border: 1px solid #ccc; border-radius: 8px; font-size: 0.9rem; width: 140px; }
+        .auth-bar button { padding: 0.5rem 1rem; border: none; border-radius: 8px; cursor: pointer; font-weight: bold; }
+        .btn-login { background: #2563eb; color: white; }
+        .btn-logout { background: #dc3545; color: white; }
+        .auth-msg { font-size: 0.8rem; color: #555; }
 
-// Elementos da UI (já existem no HTML)
-const authEmail = document.getElementById('authEmail');
-const authPassword = document.getElementById('authPassword');
-const btnLogin = document.getElementById('btnLogin');
-const btnLogout = document.getElementById('btnLogout');
-const authMsg = document.getElementById('authMsg');
-const userStatus = document.getElementById('userStatus');
+        h1 { text-align: center; margin-bottom: 0.5rem; color: #1a1a2e; font-size: 1.8rem; }
+        .user-info { text-align: center; font-size: 0.85rem; color: #888; margin-bottom: 1rem; }
 
-// Autenticação
-auth.onAuthStateChanged(user => {
-    if (user) {
-        userId = user.uid;
-        userStatus.textContent = `🟢 Logado como ${user.email}`;
-        btnLogin.style.display = 'none';
-        btnLogout.style.display = 'inline-block';
-        carregarTodosDados();
-    } else {
-        userId = null;
-        userStatus.textContent = 'Faça login para ver seus dados';
-        btnLogin.style.display = 'inline-block';
-        btnLogout.style.display = 'none';
-        itensCompras = [];
-        contasData.lista = [];
-        lazerLista = [];
-        orcamento = 0;
-        renderizarTodasGuias();
-    }
-});
+        .tabs { display: flex; gap: 0.3rem; margin-bottom: 1rem; background: white; border-radius: 12px; padding: 0.4rem; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
+        .tab-btn { flex: 1; padding: 0.6rem 0.2rem; border: none; background: transparent; border-radius: 10px; cursor: pointer; font-weight: 600; font-size: 0.8rem; color: #555; transition: all 0.2s; }
+        .tab-btn.active { background: #2563eb; color: white; }
+        .tab-btn:hover:not(.active) { background: #f1f5f9; }
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
 
-btnLogin.addEventListener('click', async () => {
-    const email = authEmail.value.trim();
-    const password = authPassword.value;
-    if (!email || !password) { authMsg.textContent = 'Preencha e‑mail e senha.'; return; }
-    try {
-        await auth.signInWithEmailAndPassword(email, password);
-        authMsg.textContent = '';
-    } catch (error) {
-        authMsg.textContent = 'Erro: ' + error.message;
-        if (error.code === 'auth/user-not-found') authMsg.textContent += ' Deseja criar conta?';
-    }
-});
+        .mes-selector { display: flex; gap: 0.5rem; align-items: center; margin-bottom: 1rem; background: white; border-radius: 12px; padding: 0.7rem; box-shadow: 0 2px 8px rgba(0,0,0,0.04); }
+        .mes-selector label { font-weight: 600; font-size: 0.9rem; }
+        .mes-selector input { padding: 0.5rem; border: 1px solid #ddd; border-radius: 8px; }
 
-btnLogout.addEventListener('click', async () => { await auth.signOut(); });
+        .card { background: white; border-radius: 12px; padding: 1rem; margin-bottom: 1rem; box-shadow: 0 2px 8px rgba(0,0,0,0.04); }
+        .row { display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center; }
+        .row input, .row select { padding: 0.6rem; border: 1px solid #ddd; border-radius: 8px; font-size: 0.95rem; }
+        .row button { padding: 0.6rem 1.2rem; background: #2563eb; color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: bold; }
+        .badge { display: inline-block; padding: 0.2rem 0.6rem; border-radius: 20px; font-size: 0.75rem; font-weight: bold; }
+        .badge-credito { background: #fef3c7; color: #b45309; }
+        .badge-debito { background: #dbeafe; color: #1e40af; }
 
-// ========== CARREGAR DADOS ==========
-async function carregarTodosDados() {
-    if (!userId) return;
-    const mes = mesAnoAtual;
-    try {
-        const comprasSnap = await db.collection('usuarios').doc(userId).collection('compras').where('mesAno', '==', mes).get();
-        itensCompras = comprasSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        .list-item { display: flex; justify-content: space-between; align-items: center; padding: 0.7rem 0; border-bottom: 1px solid #f1f1f1; }
+        .item-info { flex: 1; }
+        .item-actions { display: flex; gap: 0.3rem; }
+        .edit-btn, .delete-btn { background: none; border: none; cursor: pointer; font-size: 1.1rem; padding: 0.2rem 0.5rem; border-radius: 6px; }
+        .delete-btn { color: #dc3545; }
+        .edit-btn { color: #2563eb; }
+        .edit-form { display: flex; flex-wrap: wrap; gap: 0.3rem; align-items: center; flex: 1; }
+        .edit-form input, .edit-form select { padding: 0.4rem; border: 1px solid #ccc; border-radius: 6px; font-size: 0.9rem; }
+        .save-btn { background: #15803d; color: white; padding: 0.3rem 0.7rem; border: none; border-radius: 6px; cursor: pointer; }
+        .cancel-btn { background: #e5e7eb; color: #333; padding: 0.3rem 0.7rem; border: none; border-radius: 6px; cursor: pointer; }
 
-        const contasSnap = await db.collection('usuarios').doc(userId).collection('contas').where('mesAno', '==', mes).get();
-        contasData.lista = contasSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        .resumo-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.8rem; }
+        .resumo-item { background: #f8fafc; border-radius: 10px; padding: 1rem; }
+        .resumo-label { font-size: 0.8rem; color: #666; margin-bottom: 0.3rem; }
+        .resumo-valor { font-size: 1.3rem; font-weight: bold; }
+        .positivo { color: #15803d; }
+        .negativo { color: #b91c1c; }
 
-        const metaDoc = await db.collection('usuarios').doc(userId).collection('meta').doc('dados').get();
-        if (metaDoc.exists) {
-            contasData.entradas = metaDoc.data().entradas || 0;
-            orcamento = metaDoc.data().orcamento || 0;
-        }
+        .date-header { display: flex; align-items: center; padding: 0.5rem; border-radius: 8px; cursor: pointer; gap: 0.5rem; background: #f8fafc; margin-bottom: 0.3rem; }
+        .date-arrow { font-size: 1.2rem; }
+        .date-label { flex: 1; font-weight: 600; }
+        .date-total { font-size: 0.9rem; color: #15803d; font-weight: 600; }
+        .date-items { overflow: hidden; transition: max-height 0.3s ease; }
+        .date-group.open .date-items { max-height: 2000px; }
+        .date-group:not(.open) .date-items { max-height: 0; }
+        .item-header { display: flex; align-items: center; padding: 0.5rem; gap: 0.5rem; }
+        .item-name { flex: 1; }
+        .toggle-details-btn { background: none; border: none; cursor: pointer; font-size: 1.2rem; }
 
-        const lazerSnap = await db.collection('usuarios').doc(userId).collection('lazer').where('mesAno', '==', mes).get();
-        lazerLista = lazerSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        .conta-vencida { background-color: #ffe5e5; }
+        .conta-vencida .item-info strong { color: #b91c1c; }
+        .empty-message { text-align: center; color: #888; padding: 2rem; }
+    </style>
+</head>
+<body>
+    <div class="auth-bar" id="authBar">
+        <label>🔐 E‑mail:</label>
+        <input type="email" id="authEmail" placeholder="seu@email.com">
+        <label>Senha:</label>
+        <input type="password" id="authPassword" placeholder="Senha">
+        <button class="btn-login" id="btnLogin">Entrar</button>
+        <button class="btn-logout" id="btnLogout" style="display:none;">Sair</button>
+        <span class="auth-msg" id="authMsg"></span>
+    </div>
 
-        document.getElementById('entradas').value = contasData.entradas || '';
-        document.getElementById('orcamento').value = orcamento || '';
-        renderizarTodasGuias();
-    } catch (error) {
-        console.error('Erro ao carregar dados:', error);
-        userStatus.textContent = '🔴 Erro ao carregar dados. Verifique permissões do Firestore.';
-        renderizarTodasGuias();
-    }
-}
+    <div id="mainApp">
+        <h1>💰 Gestão Financeira</h1>
+        <div class="user-info" id="userStatus">Faça login para ver seus dados</div>
 
-async function salvarMeta() {
-    if (!userId) return;
-    await db.collection('usuarios').doc(userId).collection('meta').doc('dados').set({ entradas: contasData.entradas, orcamento }, { merge: true });
-}
+        <div class="tabs">
+            <button class="tab-btn active" data-tab="compras">🛒 Compras</button>
+            <button class="tab-btn" data-tab="contas">📄 Contas</button>
+            <button class="tab-btn" data-tab="lazer">🎉 Lazer</button>
+            <button class="tab-btn" data-tab="resumo">📊 Resumo</button>
+        </div>
 
-function renderizarTodasGuias() {
-    renderizarCompras();
-    renderizarContas();
-    renderizarLazer();
-    atualizarResumo();
-}
+        <div class="mes-selector">
+            <label>📅 Período:</label>
+            <input type="month" id="mesAnoFiltro">
+            <span style="font-size:0.8rem; color:#666;">(dados do mês)</span>
+        </div>
 
-// ========== COMPRAS ==========
-function calcSubtotal() { return itensCompras.reduce((s, i) => s + (parseFloat(i.quantidade)||0) * (parseFloat(i.preco)||0), 0); }
-function atualizarTotaisCompras() {
-    const subtotal = calcSubtotal();
-    document.getElementById('valorSubtotal').textContent = `R$ ${formatarMoeda(subtotal)}`;
-    const saldo = (orcamento||0) - subtotal;
-    const el = document.getElementById('valorSaldo');
-    el.textContent = `R$ ${formatarMoeda(saldo)}`;
-    el.style.color = saldo < 0 ? '#dc3545' : '#15803d';
-}
-function renderizarCompras() {
-    const container = document.getElementById('listaCompras');
-    if (!userId) { container.innerHTML = '<div class="empty-message">Faça login para ver suas compras.</div>'; return; }
-    if (itensCompras.length === 0) { container.innerHTML = '<div class="empty-message">Nenhum item neste mês.</div>'; atualizarTotaisCompras(); return; }
-    const grupos = {};
-    itensCompras.forEach(i => {
-        const dia = i.data.slice(0,10);
-        if (!grupos[dia]) grupos[dia] = [];
-        grupos[dia].push(i);
-    });
-    const chaves = Object.keys(grupos).sort((a,b) => b.localeCompare(a));
-    let html = '';
-    chaves.forEach(dia => {
-        const items = grupos[dia];
-        const dataFmt = new Date(dia+'T00:00:00').toLocaleDateString('pt-BR');
-        const totGrupo = items.reduce((s, i) => s + (parseFloat(i.quantidade)||0)*(parseFloat(i.preco)||0), 0);
-        html += `<div class="date-group open" data-dia="${dia}">
-            <div class="date-header"><span class="date-arrow">▼</span><span class="date-label">${dataFmt}</span>${totGrupo>0?`<span class="date-total">R$ ${formatarMoeda(totGrupo)}</span>`:''}</div>
-            <div class="date-items">`;
-        items.forEach(item => {
-            const idx = itensCompras.indexOf(item);
-            const qtd = item.quantidade != null ? item.quantidade : '';
-            const prc = item.preco != null ? Number(item.preco).toFixed(2) : '';
-            const flg = item.flagged; const exp = item.expanded || false;
-            const toggleBtn = flg ? `<button class="toggle-details-btn" data-idx="${idx}">${exp?'▲':'▼'}</button>` : '';
-            const detHtml = (flg && exp) ? `<div style="padding:0.5rem 2rem;background:#f9fafb;display:flex;gap:1rem;"><span>📦 Qtd <input type="number" value="${qtd}" data-idx="${idx}" data-field="quantidade" step="1" min="0" style="width:70px;"></span><span>💰 R$ <input type="number" value="${prc}" data-idx="${idx}" data-field="preco" step="0.01" min="0" style="width:90px;"></span></div>` : '';
-            html += `<div class="item-header"><input type="checkbox" ${flg?'checked':''} data-idx="${idx}"><span class="item-name">${escapeHtml(item.produto)}</span>${toggleBtn}</div>${detHtml}`;
-        });
-        html += '</div></div>';
-    });
-    container.innerHTML = html;
-    // rebind events
-    document.querySelectorAll('#tab-compras .toggle-details-btn').forEach(b => b.addEventListener('click', toggleDet));
-    document.querySelectorAll('#tab-compras input[type="checkbox"]').forEach(cb => cb.addEventListener('change', flagItem));
-    document.querySelectorAll('#tab-compras input[data-field]').forEach(inp => {
-        inp.addEventListener('change', updateDet);
-        inp.addEventListener('blur', updateDet);
-    });
-    atualizarTotaisCompras();
-}
-async function salvarCompra(item, id) {
-    if (!userId) return alert('Faça login primeiro.');
-    try {
-        const docRef = db.collection('usuarios').doc(userId).collection('compras').doc(id || undefined);
-        if (id) await docRef.update(item);
-        else await docRef.set(item);
-        console.log('Compra salva:', item);
-    } catch (error) {
-        console.error('Erro ao salvar compra:', error);
-        alert('Erro ao salvar. Verifique as permissões do Firestore.');
-    }
-}
-function toggleDet(e) { e.stopPropagation(); const idx = parseInt(e.currentTarget.dataset.idx); itensCompras[idx].expanded = !itensCompras[idx].expanded; salvarCompra({ expanded: itensCompras[idx].expanded }, itensCompras[idx].id); renderizarCompras(); }
-function flagItem(e) { const idx = parseInt(e.target.dataset.idx); itensCompras[idx].flagged = e.target.checked; if (!e.target.checked) itensCompras[idx].expanded = false; salvarCompra({ flagged: itensCompras[idx].flagged, expanded: itensCompras[idx].expanded }, itensCompras[idx].id); renderizarCompras(); }
-function updateDet(e) { const idx = parseInt(e.target.dataset.idx); const campo = e.target.dataset.field; let val = e.target.value.trim(); const item = itensCompras[idx]; if (campo === 'quantidade') item.quantidade = val === '' ? null : Number(val); else if (campo === 'preco') item.preco = val === '' ? null : Number(val).toFixed(2); salvarCompra({ [campo]: item[campo] }, item.id); atualizarTotaisCompras(); }
-async function adicionarProduto() {
-    if (!userId) { alert('Faça login primeiro.'); return; }
-    const nome = document.getElementById('produto').value.trim();
-    if (!nome) { alert('Nome do produto obrigatório.'); return; }
-    try {
-        const novoItem = {
-            produto: nome,
-            quantidade: null,
-            preco: null,
-            data: new Date().toISOString(),
-            mesAno: mesAnoAtual,
-            flagged: false,
-            expanded: false
+        <div id="tab-compras" class="tab-content active">
+            <div class="card row">
+                <label>💰 Orçamento:</label>
+                <input type="number" id="orcamento" placeholder="R$ 0,00" min="0" step="0.01" style="width:120px;">
+                <span style="margin-left:auto;">Saldo: <strong id="valorSaldo">R$ 0,00</strong></span>
+            </div>
+            <div class="card row">
+                <span>Subtotal do período: <strong id="valorSubtotal">R$ 0,00</strong></span>
+            </div>
+            <div class="card row">
+                <input type="text" id="produto" placeholder="Nome do produto" style="flex:2;">
+                <button id="adicionar">Adicionar</button>
+            </div>
+            <div id="listaCompras"></div>
+        </div>
+
+        <div id="tab-contas" class="tab-content">
+            <div class="card row">
+                <label>Entradas (Renda): R$</label>
+                <input type="number" id="entradas" placeholder="0,00" min="0" step="0.01" style="width:120px;">
+            </div>
+            <div class="card">
+                <div class="row">
+                    <input type="text" id="contaNome" placeholder="Nome da conta" style="flex:2;">
+                    <input type="number" id="contaValor" placeholder="Valor R$" min="0" step="0.01" style="width:100px;">
+                    <input type="date" id="contaVencimento" style="width:130px;">
+                    <label><input type="checkbox" id="contaParcelado"> Parcelado</label>
+                    <div id="parcelaContainer" style="display:none;">
+                        <input type="number" id="contaParcelas" placeholder="Vezes" min="1" step="1" style="width:70px;">
+                    </div>
+                    <button id="addConta">+</button>
+                </div>
+            </div>
+            <div id="listaContas"></div>
+            <div class="card row">
+                <span>Total contas: <strong id="totalContas">R$ 0,00</strong></span>
+                <span style="margin-left:auto;">Restante: <strong id="restanteContas">R$ 0,00</strong></span>
+            </div>
+        </div>
+
+        <div id="tab-lazer" class="tab-content">
+            <div class="card row">
+                <input type="text" id="lazerDescricao" placeholder="Descrição" style="flex:2;">
+                <input type="number" id="lazerValor" placeholder="Valor R$" min="0" step="0.01" style="width:100px;">
+                <select id="lazerPagamento">
+                    <option value="debito">Débito</option>
+                    <option value="credito">Crédito</option>
+                </select>
+                <button id="addLazer">+</button>
+            </div>
+            <div id="listaLazer"></div>
+            <div class="card row">
+                <span>Total lazer: <strong id="totalLazer">R$ 0,00</strong></span>
+            </div>
+        </div>
+
+        <div id="tab-resumo" class="tab-content">
+            <div class="card">
+                <div class="resumo-grid">
+                    <div class="resumo-item"><div class="resumo-label">Entradas</div><div class="resumo-valor positivo" id="resEntradas">R$ 0,00</div></div>
+                    <div class="resumo-item"><div class="resumo-label">Compras</div><div class="resumo-valor" id="resCompras">R$ 0,00</div></div>
+                    <div class="resumo-item"><div class="resumo-label">Contas</div><div class="resumo-valor" id="resContas">R$ 0,00</div></div>
+                    <div class="resumo-item"><div class="resumo-label">Lazer</div><div class="resumo-valor" id="resLazer">R$ 0,00</div></div>
+                    <div class="resumo-item" style="grid-column: span 2;"><div class="resumo-label">Saldo Geral</div><div class="resumo-valor" id="resSaldo">R$ 0,00</div></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Firebase SDKs (compat) -->
+    <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore-compat.js"></script>
+
+    <script>
+        // 🔥 Configuração do Firebase (substitua se necessário)
+        const firebaseConfig = {
+            apiKey: "AIzaSyBfg7SfKe4kj1KItvsQ3Ngzi23ctH8kkJU",
+            authDomain: "gestaofincanceira.firebaseapp.com",
+            databaseURL: "https://gestaofincanceira-default-rtdb.firebaseio.com",
+            projectId: "gestaofincanceira",
+            storageBucket: "gestaofincanceira.firebasestorage.app",
+            messagingSenderId: "15243933186",
+            appId: "1:15243933186:web:16e853fbd02cfb37c9991b"
         };
-        const docRef = await db.collection('usuarios').doc(userId).collection('compras').add(novoItem);
-        novoItem.id = docRef.id;
-        itensCompras.push(novoItem);
-        renderizarCompras();
-        document.getElementById('produto').value = '';
-        console.log('Produto adicionado com ID:', docRef.id);
-    } catch (error) {
-        console.error('Erro ao adicionar produto:', error);
-        alert('Erro ao adicionar. Verifique o console (F12) e as regras do Firestore.');
-    }
-}
-document.getElementById('adicionar').addEventListener('click', adicionarProduto);
-document.getElementById('orcamento').addEventListener('input', function() { orcamento = parseFloat(this.value) || 0; salvarMeta(); atualizarTotaisCompras(); });
+        firebase.initializeApp(firebaseConfig);
+        const auth = firebase.auth();
+        const db = firebase.firestore();
 
-// ========== CONTAS ==========
-function totalContas() { return contasData.lista.reduce((s, c) => s + (parseFloat(c.valor)||0), 0); }
-function renderizarContas() {
-    const container = document.getElementById('listaContas');
-    if (!userId) { container.innerHTML = '<div class="empty-message">Faça login para ver suas contas.</div>'; return; }
-    if (contasData.lista.length === 0) { container.innerHTML = '<div class="empty-message">Nenhuma conta neste mês.</div>'; }
-    else {
-        const grupos = {};
-        contasData.lista.forEach(c => { const venc = c.vencimento || 'sem_vencimento'; if (!grupos[venc]) grupos[venc] = []; grupos[venc].push(c); });
-        const chaves = Object.keys(grupos).filter(k => k !== 'sem_vencimento').sort();
-        if (grupos['sem_vencimento']) chaves.push('sem_vencimento');
-        let html = '';
-        chaves.forEach(chave => {
-            const items = grupos[chave];
-            const titulo = chave === 'sem_vencimento' ? 'Sem vencimento' : `Vencimento: ${new Date(chave+'T00:00:00').toLocaleDateString('pt-BR')}`;
-            html += `<div class="date-group open"><div class="date-header"><span class="date-arrow">▼</span><span class="date-label">${titulo}</span></div><div class="date-items">`;
-            items.forEach(c => {
-                const idx = contasData.lista.indexOf(c);
-                const vencida = c.vencimento ? new Date(c.vencimento+'T00:00:00') < new Date() : false;
-                if (idx === contaEditIndex) {
-                    html += `<div class="list-item ${vencida?'conta-vencida':''}"><div class="edit-form">
-                        <input type="text" id="editContaNome" value="${escapeHtml(c.nome)}" style="width:100px;">
-                        <input type="number" id="editContaValor" value="${parseFloat(c.valor)||0}" style="width:80px;">
-                        <input type="date" id="editContaVenc" value="${c.vencimento||''}" style="width:110px;">
-                        <label><input type="checkbox" id="editContaParc" ${c.parcelado?'checked':''}> Parc</label>
-                        <input type="number" id="editContaParcelas" value="${c.parcelas||''}" placeholder="Vezes" style="width:70px; display:${c.parcelado?'inline-block':'none'};">
-                        <button class="save-btn" data-idx="${idx}">Salvar</button>
-                        <button class="cancel-btn">Cancelar</button>
-                    </div></div>`;
-                } else {
-                    const parcelasStr = c.parcelado && c.parcelas ? ` (${c.parcelas}x)` : '';
-                    html += `<div class="list-item ${vencida?'conta-vencida':''}">
-                        <div class="item-info"><strong>${escapeHtml(c.nome)}${parcelasStr}</strong> - R$ ${formatarMoeda(c.valor)}<br>
-                        <small>Venc: ${c.vencimento ? new Date(c.vencimento+'T00:00:00').toLocaleDateString('pt-BR') : 'Sem vencimento'} ${c.parcelado?'🔁 Parcelado':''}</small></div>
-                        <div class="item-actions">
-                            <button class="edit-btn" data-idx="${idx}">✏️</button>
-                            <button class="delete-btn" data-id="${c.id}">🗑️</button>
-                        </div>
-                    </div>`;
-                }
-            });
-            html += '</div></div>';
-        });
-        container.innerHTML = html;
-        document.querySelectorAll('#tab-contas .edit-btn').forEach(b => b.addEventListener('click', () => { contaEditIndex = parseInt(b.dataset.idx); renderizarContas(); }));
-        document.querySelectorAll('#tab-contas .delete-btn').forEach(b => b.addEventListener('click', deletarConta));
-        document.querySelectorAll('#tab-contas .save-btn').forEach(b => b.addEventListener('click', salvarEdicaoConta));
-        document.querySelectorAll('#tab-contas .cancel-btn').forEach(b => b.addEventListener('click', () => { contaEditIndex = -1; renderizarContas(); }));
-        document.querySelectorAll('#editContaParc').forEach(cb => { cb.addEventListener('change', function() { this.closest('.edit-form').querySelector('#editContaParcelas').style.display = this.checked ? 'inline-block' : 'none'; }); });
-    }
-    document.getElementById('totalContas').textContent = `R$ ${formatarMoeda(totalContas())}`;
-    document.getElementById('restanteContas').textContent = `R$ ${formatarMoeda((contasData.entradas||0) - totalContas())}`;
-}
-async function adicionarConta() {
-    if (!userId) { alert('Faça login.'); return; }
-    const nome = document.getElementById('contaNome').value.trim();
-    const valor = parseFloat(document.getElementById('contaValor').value)||0;
-    const venc = document.getElementById('contaVencimento').value;
-    const parc = document.getElementById('contaParcelado').checked;
-    const parcelas = parc ? (parseInt(document.getElementById('contaParcelas').value)||1) : null;
-    if(!nome || valor<=0) { alert('Preencha nome e valor.'); return; }
-    try {
-        const nova = { nome, valor, vencimento: venc, parcelado: parc, parcelas, mesAno: mesAnoAtual };
-        const docRef = await db.collection('usuarios').doc(userId).collection('contas').add(nova);
-        nova.id = docRef.id;
-        contasData.lista.push(nova);
-        renderizarContas();
-        document.getElementById('contaNome').value=''; document.getElementById('contaValor').value='';
-        document.getElementById('contaVencimento').value=''; document.getElementById('contaParcelado').checked=false;
-        document.getElementById('contaParcelas').value=''; document.getElementById('parcelaContainer').style.display='none';
-    } catch (error) { console.error('Erro ao adicionar conta:', error); alert('Erro ao adicionar conta.'); }
-}
-async function deletarConta(e) { if (!userId) return; const id = e.currentTarget.dataset.id; await db.collection('usuarios').doc(userId).collection('contas').doc(id).delete(); contasData.lista = contasData.lista.filter(c => c.id !== id); renderizarContas(); }
-async function salvarEdicaoConta(e) {
-    const idx = parseInt(e.currentTarget.dataset.idx);
-    const nome = document.getElementById('editContaNome').value.trim();
-    const valor = parseFloat(document.getElementById('editContaValor').value)||0;
-    const venc = document.getElementById('editContaVenc').value;
-    const parc = document.getElementById('editContaParc').checked;
-    const parcelas = parc ? (parseInt(document.getElementById('editContaParcelas').value)||1) : null;
-    if(!nome || valor<=0) return alert('Preencha nome e valor.');
-    const atualizado = { nome, valor, vencimento: venc, parcelado: parc, parcelas };
-    await db.collection('usuarios').doc(userId).collection('contas').doc(contasData.lista[idx].id).update(atualizado);
-    Object.assign(contasData.lista[idx], atualizado);
-    contaEditIndex = -1;
-    renderizarContas();
-}
-document.getElementById('addConta').addEventListener('click', adicionarConta);
-document.getElementById('contaParcelado').addEventListener('change', function() { document.getElementById('parcelaContainer').style.display = this.checked ? 'inline-block' : 'none'; });
-document.getElementById('entradas').addEventListener('input', function() { contasData.entradas = parseFloat(this.value)||0; salvarMeta(); renderizarContas(); });
+        let userId = null;
+        let mesAnoAtual = new Date().toISOString().slice(0,7);
+        let itensCompras = [];
+        let contasData = { entradas: 0, lista: [] };
+        let lazerLista = [];
+        let orcamento = 0;
+        let contaEditIndex = -1;
+        let lazerEditIndex = -1;
 
-// ========== LAZER ==========
-function totalLazer() { return lazerLista.reduce((s, l) => s + (parseFloat(l.valor)||0), 0); }
-function renderizarLazer() {
-    const container = document.getElementById('listaLazer');
-    if (!userId) { container.innerHTML = '<div class="empty-message">Faça login para ver seus gastos de lazer.</div>'; return; }
-    if (lazerLista.length === 0) { container.innerHTML = '<div class="empty-message">Nenhum lazer neste mês.</div>'; }
-    else {
-        let html = '';
-        lazerLista.forEach((l, i) => {
-            if (i === lazerEditIndex) {
-                html += `<div class="list-item"><div class="edit-form">
-                    <input type="text" id="editLazerDesc" value="${escapeHtml(l.descricao)}" style="width:110px;">
-                    <input type="number" id="editLazerValor" value="${parseFloat(l.valor)||0}" style="width:80px;">
-                    <select id="editLazerPag"><option value="debito" ${l.pagamento==='debito'?'selected':''}>Débito</option><option value="credito" ${l.pagamento==='credito'?'selected':''}>Crédito</option></select>
-                    <button class="save-btn" data-idx="${i}">Salvar</button>
-                    <button class="cancel-btn">Cancelar</button>
-                </div></div>`;
+        // UI auth
+        const authEmail = document.getElementById('authEmail');
+        const authPassword = document.getElementById('authPassword');
+        const btnLogin = document.getElementById('btnLogin');
+        const btnLogout = document.getElementById('btnLogout');
+        const authMsg = document.getElementById('authMsg');
+        const userStatus = document.getElementById('userStatus');
+
+        // Autenticação
+        auth.onAuthStateChanged(user => {
+            if (user) {
+                userId = user.uid;
+                userStatus.textContent = `🟢 Logado como ${user.email}`;
+                btnLogin.style.display = 'none';
+                btnLogout.style.display = 'inline-block';
+                carregarTodosDados();
             } else {
-                const badgeCls = l.pagamento==='credito'?'badge-credito':'badge-debito';
-                const txtPag = l.pagamento==='credito'?'Crédito':'Débito';
-                html += `<div class="list-item" style="background:${l.pagamento==='credito'?'#fff9e6':'white'}">
-                    <div class="item-info"><strong>${escapeHtml(l.descricao)}</strong> - R$ ${formatarMoeda(l.valor)}<br><small><span class="badge ${badgeCls}">${txtPag}</span></small></div>
-                    <div class="item-actions"><button class="edit-btn" data-idx="${i}">✏️</button><button class="delete-btn" data-id="${l.id}">🗑️</button></div>
-                </div>`;
+                userId = null;
+                userStatus.textContent = 'Faça login para ver seus dados';
+                btnLogin.style.display = 'inline-block';
+                btnLogout.style.display = 'none';
+                itensCompras = [];
+                contasData.lista = [];
+                lazerLista = [];
+                orcamento = 0;
+                renderizarTodasGuias();
             }
         });
-        container.innerHTML = html;
-        document.querySelectorAll('#tab-lazer .edit-btn').forEach(b => b.addEventListener('click', () => { lazerEditIndex = parseInt(b.dataset.idx); renderizarLazer(); }));
-        document.querySelectorAll('#tab-lazer .delete-btn').forEach(b => b.addEventListener('click', deletarLazer));
-        document.querySelectorAll('#tab-lazer .save-btn').forEach(b => b.addEventListener('click', salvarEdicaoLazer));
-        document.querySelectorAll('#tab-lazer .cancel-btn').forEach(b => b.addEventListener('click', () => { lazerEditIndex = -1; renderizarLazer(); }));
-    }
-    document.getElementById('totalLazer').textContent = `R$ ${formatarMoeda(totalLazer())}`;
-}
-async function adicionarLazer() {
-    if (!userId) { alert('Faça login.'); return; }
-    const desc = document.getElementById('lazerDescricao').value.trim();
-    const valor = parseFloat(document.getElementById('lazerValor').value)||0;
-    const pag = document.getElementById('lazerPagamento').value;
-    if(!desc || valor<=0) { alert('Preencha descrição e valor.'); return; }
-    try {
-        const novo = { descricao: desc, valor, pagamento: pag, data: new Date().toISOString(), mesAno: mesAnoAtual };
-        const docRef = await db.collection('usuarios').doc(userId).collection('lazer').add(novo);
-        novo.id = docRef.id;
-        lazerLista.push(novo);
-        renderizarLazer();
-        document.getElementById('lazerDescricao').value=''; document.getElementById('lazerValor').value='';
-    } catch (error) { console.error('Erro ao adicionar lazer:', error); alert('Erro ao adicionar lazer.'); }
-}
-async function deletarLazer(e) { if (!userId) return; const id = e.currentTarget.dataset.id; await db.collection('usuarios').doc(userId).collection('lazer').doc(id).delete(); lazerLista = lazerLista.filter(l => l.id !== id); renderizarLazer(); }
-async function salvarEdicaoLazer(e) {
-    const idx = parseInt(e.currentTarget.dataset.idx);
-    const desc = document.getElementById('editLazerDesc').value.trim();
-    const valor = parseFloat(document.getElementById('editLazerValor').value)||0;
-    const pag = document.getElementById('editLazerPag').value;
-    if(!desc || valor<=0) return alert('Preencha descrição e valor.');
-    const atualizado = { descricao: desc, valor, pagamento: pag };
-    await db.collection('usuarios').doc(userId).collection('lazer').doc(lazerLista[idx].id).update(atualizado);
-    Object.assign(lazerLista[idx], atualizado);
-    lazerEditIndex = -1;
-    renderizarLazer();
-}
-document.getElementById('addLazer').addEventListener('click', adicionarLazer);
 
-// ========== RESUMO ==========
-function atualizarResumo() {
-    if (!userId) {
-        document.getElementById('resEntradas').textContent = 'R$ 0,00';
-        document.getElementById('resCompras').textContent = 'R$ 0,00';
-        document.getElementById('resContas').textContent = 'R$ 0,00';
-        document.getElementById('resLazer').textContent = 'R$ 0,00';
-        document.getElementById('resSaldo').textContent = 'R$ 0,00';
-        return;
-    }
-    const entradas = contasData.entradas || 0;
-    const compras = calcSubtotal();
-    const contas = totalContas();
-    const lazer = totalLazer();
-    const saldo = entradas - (compras + contas + lazer);
-    document.getElementById('resEntradas').textContent = `R$ ${formatarMoeda(entradas)}`;
-    document.getElementById('resCompras').textContent = `R$ ${formatarMoeda(compras)}`;
-    document.getElementById('resContas').textContent = `R$ ${formatarMoeda(contas)}`;
-    document.getElementById('resLazer').textContent = `R$ ${formatarMoeda(lazer)}`;
-    const saldoEl = document.getElementById('resSaldo');
-    saldoEl.textContent = `R$ ${formatarMoeda(saldo)}`;
-    saldoEl.className = 'resumo-valor ' + (saldo >= 0 ? 'positivo' : 'negativo');
-}
+        btnLogin.addEventListener('click', async () => {
+            const email = authEmail.value.trim();
+            const password = authPassword.value;
+            if (!email || !password) { authMsg.textContent = 'Preencha e‑mail e senha.'; return; }
+            try {
+                await auth.signInWithEmailAndPassword(email, password);
+                authMsg.textContent = '';
+            } catch (error) {
+                authMsg.textContent = 'Erro: ' + error.message;
+                if (error.code === 'auth/user-not-found') authMsg.textContent += ' Deseja criar conta?';
+            }
+        });
+        btnLogout.addEventListener('click', async () => { await auth.signOut(); });
 
-// ========== UTILITÁRIOS ==========
-function formatarMoeda(v) { return v.toFixed(2).replace('.', ','); }
-function escapeHtml(t) { const d = document.createElement('div'); d.textContent = t; return d.innerHTML; }
+        // Carregar dados
+        async function carregarTodosDados() {
+            if (!userId) return;
+            const mes = mesAnoAtual;
+            try {
+                const comprasSnap = await db.collection('usuarios').doc(userId).collection('compras').where('mesAno', '==', mes).get();
+                itensCompras = comprasSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 
-// ========== NAVEGAÇÃO ==========
-document.getElementById('mesAnoFiltro').value = mesAnoAtual;
-document.getElementById('mesAnoFiltro').addEventListener('change', function() { mesAnoAtual = this.value; if (userId) carregarTodosDados(); });
+                const contasSnap = await db.collection('usuarios').doc(userId).collection('contas').where('mesAno', '==', mes).get();
+                contasData.lista = contasSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 
-document.querySelectorAll('.tab-btn').forEach(btn => {
-    btn.addEventListener('click', function() {
-        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-        this.classList.add('active');
-        document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
-        document.getElementById('tab-' + this.dataset.tab).classList.add('active');
-        if (this.dataset.tab === 'resumo') atualizarResumo();
-    });
-});
+                const metaDoc = await db.collection('usuarios').doc(userId).collection('meta').doc('dados').get();
+                if (metaDoc.exists) {
+                    contasData.entradas = metaDoc.data().entradas || 0;
+                    orcamento = metaDoc.data().orcamento || 0;
+                }
 
-document.addEventListener('keypress', e => { if (e.key === 'Enter' && document.activeElement?.id === 'produto') adicionarProduto(); });
+                const lazerSnap = await db.collection('usuarios').doc(userId).collection('lazer').where('mesAno', '==', mes).get();
+                lazerLista = lazerSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+
+                document.getElementById('entradas').value = contasData.entradas || '';
+                document.getElementById('orcamento').value = orcamento || '';
+                renderizarTodasGuias();
+            } catch (error) {
+                console.error('Erro ao carregar:', error);
+                userStatus.textContent = '🔴 Erro ao carregar dados. Ative a API Firestore.';
+                renderizarTodasGuias();
+            }
+        }
+        async function salvarMeta() {
+            if (!userId) return;
+            await db.collection('usuarios').doc(userId).collection('meta').doc('dados').set({ entradas: contasData.entradas, orcamento }, { merge: true });
+        }
+        function renderizarTodasGuias() {
+            renderizarCompras();
+            renderizarContas();
+            renderizarLazer();
+            atualizarResumo();
+        }
+
+        // Compras
+        function calcSubtotal() { return itensCompras.reduce((s, i) => s + (parseFloat(i.quantidade)||0) * (parseFloat(i.preco)||0), 0); }
+        function atualizarTotaisCompras() {
+            const subtotal = calcSubtotal();
+            document.getElementById('valorSubtotal').textContent = `R$ ${formatarMoeda(subtotal)}`;
+            const saldo = (orcamento||0) - subtotal;
+            const el = document.getElementById('valorSaldo');
+            el.textContent = `R$ ${formatarMoeda(saldo)}`;
+            el.style.color = saldo < 0 ? '#dc3545' : '#15803d';
+        }
+        function renderizarCompras() {
+            const container = document.getElementById('listaCompras');
+            if (!userId) { container.innerHTML = '<div class="empty-message">Faça login para ver suas compras.</div>'; return; }
+            if (itensCompras.length === 0) { container.innerHTML = '<div class="empty-message">Nenhum item neste mês.</div>'; atualizarTotaisCompras(); return; }
+            const grupos = {};
+            itensCompras.forEach(i => { const dia = i.data.slice(0,10); if (!grupos[dia]) grupos[dia] = []; grupos[dia].push(i); });
+            const chaves = Object.keys(grupos).sort((a,b) => b.localeCompare(a));
+            let html = '';
+            chaves.forEach(dia => {
+                const items = grupos[dia];
+                const dataFmt = new Date(dia+'T00:00:00').toLocaleDateString('pt-BR');
+                const totGrupo = items.reduce((s, i) => s + (parseFloat(i.quantidade)||0)*(parseFloat(i.preco)||0), 0);
+                html += `<div class="date-group open" data-dia="${dia}"><div class="date-header"><span class="date-arrow">▼</span><span class="date-label">${dataFmt}</span>${totGrupo>0?`<span class="date-total">R$ ${formatarMoeda(totGrupo)}</span>`:''}</div><div class="date-items">`;
+                items.forEach(item => {
+                    const idx = itensCompras.indexOf(item);
+                    const qtd = item.quantidade != null ? item.quantidade : '';
+                    const prc = item.preco != null ? Number(item.preco).toFixed(2) : '';
+                    const flg = item.flagged; const exp = item.expanded || false;
+                    const toggleBtn = flg ? `<button class="toggle-details-btn" data-idx="${idx}">${exp?'▲':'▼'}</button>` : '';
+                    const detHtml = (flg && exp) ? `<div style="padding:0.5rem 2rem;background:#f9fafb;display:flex;gap:1rem;"><span>📦 Qtd <input type="number" value="${qtd}" data-idx="${idx}" data-field="quantidade" step="1" min="0" style="width:70px;"></span><span>💰 R$ <input type="number" value="${prc}" data-idx="${idx}" data-field="preco" step="0.01" min="0" style="width:90px;"></span></div>` : '';
+                    html += `<div class="item-header"><input type="checkbox" ${flg?'checked':''} data-idx="${idx}"><span class="item-name">${escapeHtml(item.produto)}</span>${toggleBtn}</div>${detHtml}`;
+                });
+                html += '</div></div>';
+            });
+            container.innerHTML = html;
+            document.querySelectorAll('#tab-compras .toggle-details-btn').forEach(b => b.addEventListener('click', toggleDet));
+            document.querySelectorAll('#tab-compras input[type="checkbox"]').forEach(cb => cb.addEventListener('change', flagItem));
+            document.querySelectorAll('#tab-compras input[data-field]').forEach(inp => { inp.addEventListener('change', updateDet); inp.addEventListener('blur', updateDet); });
+            atualizarTotaisCompras();
+        }
+        async function salvarCompra(item, id) {
+            if (!userId) return alert('Faça login primeiro.');
+            const docRef = db.collection('usuarios').doc(userId).collection('compras').doc(id || undefined);
+            try { if (id) await docRef.update(item); else await docRef.set(item); } catch (e) { console.error(e); alert('Erro ao salvar compra.'); }
+        }
+        function toggleDet(e) { e.stopPropagation(); const idx = parseInt(e.currentTarget.dataset.idx); itensCompras[idx].expanded = !itensCompras[idx].expanded; salvarCompra({ expanded: itensCompras[idx].expanded }, itensCompras[idx].id); renderizarCompras(); }
+        function flagItem(e) { const idx = parseInt(e.target.dataset.idx); itensCompras[idx].flagged = e.target.checked; if (!e.target.checked) itensCompras[idx].expanded = false; salvarCompra({ flagged: itensCompras[idx].flagged, expanded: itensCompras[idx].expanded }, itensCompras[idx].id); renderizarCompras(); }
+        function updateDet(e) { const idx = parseInt(e.target.dataset.idx); const campo = e.target.dataset.field; let val = e.target.value.trim(); const item = itensCompras[idx]; if (campo === 'quantidade') item.quantidade = val === '' ? null : Number(val); else if (campo === 'preco') item.preco = val === '' ? null : Number(val).toFixed(2); salvarCompra({ [campo]: item[campo] }, item.id); atualizarTotaisCompras(); }
+        async function adicionarProduto() {
+            if (!userId) { alert('Faça login primeiro.'); return; }
+            const nome = document.getElementById('produto').value.trim();
+            if (!nome) { alert('Nome do produto obrigatório.'); return; }
+            const novoItem = { produto: nome, quantidade: null, preco: null, data: new Date().toISOString(), mesAno: mesAnoAtual, flagged: false, expanded: false };
+            try {
+                const docRef = await db.collection('usuarios').doc(userId).collection('compras').add(novoItem);
+                novoItem.id = docRef.id;
+                itensCompras.push(novoItem);
+                renderizarCompras();
+                document.getElementById('produto').value = '';
+            } catch (e) { console.error(e); alert('Erro ao adicionar produto. Ative a API Firestore.'); }
+        }
+        document.getElementById('adicionar').addEventListener('click', adicionarProduto);
+        document.getElementById('orcamento').addEventListener('input', function() { orcamento = parseFloat(this.value) || 0; salvarMeta(); atualizarTotaisCompras(); });
+
+        // Contas (resumido, mesma lógica de adicionar com tratamento de erro)
+        function totalContas() { return contasData.lista.reduce((s, c) => s + (parseFloat(c.valor)||0), 0); }
+        function renderizarContas() {
+            const container = document.getElementById('listaContas');
+            if (!userId) { container.innerHTML = '<div class="empty-message">Faça login para ver suas contas.</div>'; return; }
+            if (contasData.lista.length === 0) { container.innerHTML = '<div class="empty-message">Nenhuma conta neste mês.</div>'; }
+            else {
+                const grupos = {};
+                contasData.lista.forEach(c => { const venc = c.vencimento || 'sem_vencimento'; if (!grupos[venc]) grupos[venc] = []; grupos[venc].push(c); });
+                const chaves = Object.keys(grupos).filter(k => k !== 'sem_vencimento').sort();
+                if (grupos['sem_vencimento']) chaves.push('sem_vencimento');
+                let html = '';
+                chaves.forEach(chave => {
+                    const items = grupos[chave];
+                    const titulo = chave === 'sem_vencimento' ? 'Sem vencimento' : `Vencimento: ${new Date(chave+'T00:00:00').toLocaleDateString('pt-BR')}`;
+                    html += `<div class="date-group open"><div class="date-header"><span class="date-arrow">▼</span><span class="date-label">${titulo}</span></div><div class="date-items">`;
+                    items.forEach(c => {
+                        const idx = contasData.lista.indexOf(c);
+                        const vencida = c.vencimento ? new Date(c.vencimento+'T00:00:00') < new Date() : false;
+                        if (idx === contaEditIndex) {
+                            html += `<div class="list-item ${vencida?'conta-vencida':''}"><div class="edit-form">
+                                <input type="text" id="editContaNome" value="${escapeHtml(c.nome)}" style="width:100px;">
+                                <input type="number" id="editContaValor" value="${parseFloat(c.valor)||0}" style="width:80px;">
+                                <input type="date" id="editContaVenc" value="${c.vencimento||''}" style="width:110px;">
+                                <label><input type="checkbox" id="editContaParc" ${c.parcelado?'checked':''}> Parc</label>
+                                <input type="number" id="editContaParcelas" value="${c.parcelas||''}" placeholder="Vezes" style="width:70px; display:${c.parcelado?'inline-block':'none'};">
+                                <button class="save-btn" data-idx="${idx}">Salvar</button>
+                                <button class="cancel-btn">Cancelar</button>
+                            </div></div>`;
+                        } else {
+                            const parcelasStr = c.parcelado && c.parcelas ? ` (${c.parcelas}x)` : '';
+                            html += `<div class="list-item ${vencida?'conta-vencida':''}">
+                                <div class="item-info"><strong>${escapeHtml(c.nome)}${parcelasStr}</strong> - R$ ${formatarMoeda(c.valor)}<br>
+                                <small>Venc: ${c.vencimento ? new Date(c.vencimento+'T00:00:00').toLocaleDateString('pt-BR') : 'Sem vencimento'} ${c.parcelado?'🔁 Parcelado':''}</small></div>
+                                <div class="item-actions"><button class="edit-btn" data-idx="${idx}">✏️</button><button class="delete-btn" data-id="${c.id}">🗑️</button></div>
+                            </div>`;
+                        }
+                    });
+                    html += '</div></div>';
+                });
+                container.innerHTML = html;
+                document.querySelectorAll('#tab-contas .edit-btn').forEach(b => b.addEventListener('click', () => { contaEditIndex = parseInt(b.dataset.idx); renderizarContas(); }));
+                document.querySelectorAll('#tab-contas .delete-btn').forEach(b => b.addEventListener('click', deletarConta));
+                document.querySelectorAll('#tab-contas .save-btn').forEach(b => b.addEventListener('click', salvarEdicaoConta));
+                document.querySelectorAll('#tab-contas .cancel-btn').forEach(b => b.addEventListener('click', () => { contaEditIndex = -1; renderizarContas(); }));
+                document.querySelectorAll('#editContaParc').forEach(cb => { cb.addEventListener('change', function() { this.closest('.edit-form').querySelector('#editContaParcelas').style.display = this.checked ? 'inline-block' : 'none'; }); });
+            }
+            document.getElementById('totalContas').textContent = `R$ ${formatarMoeda(totalContas())}`;
+            document.getElementById('restanteContas').textContent = `R$ ${formatarMoeda((contasData.entradas||0) - totalContas())}`;
+        }
+        async function adicionarConta() {
+            if (!userId) { alert('Faça login.'); return; }
+            const nome = document.getElementById('contaNome').value.trim();
+            const valor = parseFloat(document.getElementById('contaValor').value)||0;
+            const venc = document.getElementById('contaVencimento').value;
+            const parc = document.getElementById('contaParcelado').checked;
+            const parcelas = parc ? (parseInt(document.getElementById('contaParcelas').value)||1) : null;
+            if(!nome || valor<=0) { alert('Preencha nome e valor.'); return; }
+            try {
+                const nova = { nome, valor, vencimento: venc, parcelado: parc, parcelas, mesAno: mesAnoAtual };
+                const docRef = await db.collection('usuarios').doc(userId).collection('contas').add(nova);
+                nova.id = docRef.id;
+                contasData.lista.push(nova);
+                renderizarContas();
+                document.getElementById('contaNome').value=''; document.getElementById('contaValor').value='';
+                document.getElementById('contaVencimento').value=''; document.getElementById('contaParcelado').checked=false;
+                document.getElementById('contaParcelas').value=''; document.getElementById('parcelaContainer').style.display='none';
+            } catch (e) { console.error(e); alert('Erro ao adicionar conta.'); }
+        }
+        async function deletarConta(e) { if (!userId) return; await db.collection('usuarios').doc(userId).collection('contas').doc(e.currentTarget.dataset.id).delete(); contasData.lista = contasData.lista.filter(c => c.id !== e.currentTarget.dataset.id); renderizarContas(); }
+        async function salvarEdicaoConta(e) {
+            const idx = parseInt(e.currentTarget.dataset.idx);
+            const nome = document.getElementById('editContaNome').value.trim();
+            const valor = parseFloat(document.getElementById('editContaValor').value)||0;
+            const venc = document.getElementById('editContaVenc').value;
+            const parc = document.getElementById('editContaParc').checked;
+            const parcelas = parc ? (parseInt(document.getElementById('editContaParcelas').value)||1) : null;
+            if(!nome || valor<=0) return alert('Preencha nome e valor.');
+            const atualizado = { nome, valor, vencimento: venc, parcelado: parc, parcelas };
+            await db.collection('usuarios').doc(userId).collection('contas').doc(contasData.lista[idx].id).update(atualizado);
+            Object.assign(contasData.lista[idx], atualizado);
+            contaEditIndex = -1;
+            renderizarContas();
+        }
+        document.getElementById('addConta').addEventListener('click', adicionarConta);
+        document.getElementById('contaParcelado').addEventListener('change', function() { document.getElementById('parcelaContainer').style.display = this.checked ? 'inline-block' : 'none'; });
+        document.getElementById('entradas').addEventListener('input', function() { contasData.entradas = parseFloat(this.value)||0; salvarMeta(); renderizarContas(); });
+
+        // Lazer (resumido)
+        function totalLazer() { return lazerLista.reduce((s, l) => s + (parseFloat(l.valor)||0), 0); }
+        function renderizarLazer() {
+            const container = document.getElementById('listaLazer');
+            if (!userId) { container.innerHTML = '<div class="empty-message">Faça login para ver seus gastos de lazer.</div>'; return; }
+            if (lazerLista.length === 0) { container.innerHTML = '<div class="empty-message">Nenhum lazer neste mês.</div>'; }
+            else {
+                let html = '';
+                lazerLista.forEach((l, i) => {
+                    if (i === lazerEditIndex) {
+                        html += `<div class="list-item"><div class="edit-form">
+                            <input type="text" id="editLazerDesc" value="${escapeHtml(l.descricao)}" style="width:110px;">
+                            <input type="number" id="editLazerValor" value="${parseFloat(l.valor)||0}" style="width:80px;">
+                            <select id="editLazerPag"><option value="debito" ${l.pagamento==='debito'?'selected':''}>Débito</option><option value="credito" ${l.pagamento==='credito'?'selected':''}>Crédito</option></select>
+                            <button class="save-btn" data-idx="${i}">Salvar</button>
+                            <button class="cancel-btn">Cancelar</button>
+                        </div></div>`;
+                    } else {
+                        const badgeCls = l.pagamento==='credito'?'badge-credito':'badge-debito';
+                        const txtPag = l.pagamento==='credito'?'Crédito':'Débito';
+                        html += `<div class="list-item" style="background:${l.pagamento==='credito'?'#fff9e6':'white'}">
+                            <div class="item-info"><strong>${escapeHtml(l.descricao)}</strong> - R$ ${formatarMoeda(l.valor)}<br><small><span class="badge ${badgeCls}">${txtPag}</span></small></div>
+                            <div class="item-actions"><button class="edit-btn" data-idx="${i}">✏️</button><button class="delete-btn" data-id="${l.id}">🗑️</button></div>
+                        </div>`;
+                    }
+                });
+                container.innerHTML = html;
+                document.querySelectorAll('#tab-lazer .edit-btn').forEach(b => b.addEventListener('click', () => { lazerEditIndex = parseInt(b.dataset.idx); renderizarLazer(); }));
+                document.querySelectorAll('#tab-lazer .delete-btn').forEach(b => b.addEventListener('click', deletarLazer));
+                document.querySelectorAll('#tab-lazer .save-btn').forEach(b => b.addEventListener('click', salvarEdicaoLazer));
+                document.querySelectorAll('#tab-lazer .cancel-btn').forEach(b => b.addEventListener('click', () => { lazerEditIndex = -1; renderizarLazer(); }));
+            }
+            document.getElementById('totalLazer').textContent = `R$ ${formatarMoeda(totalLazer())}`;
+        }
+        async function adicionarLazer() {
+            if (!userId) { alert('Faça login.'); return; }
+            const desc = document.getElementById('lazerDescricao').value.trim();
+            const valor = parseFloat(document.getElementById('lazerValor').value)||0;
+            const pag = document.getElementById('lazerPagamento').value;
+            if(!desc || valor<=0) { alert('Preencha descrição e valor.'); return; }
+            try {
+                const novo = { descricao: desc, valor, pagamento: pag, data: new Date().toISOString(), mesAno: mesAnoAtual };
+                const docRef = await db.collection('usuarios').doc(userId).collection('lazer').add(novo);
+                novo.id = docRef.id;
+                lazerLista.push(novo);
+                renderizarLazer();
+                document.getElementById('lazerDescricao').value=''; document.getElementById('lazerValor').value='';
+            } catch (e) { console.error(e); alert('Erro ao adicionar lazer.'); }
+        }
+        async function deletarLazer(e) { if (!userId) return; await db.collection('usuarios').doc(userId).collection('lazer').doc(e.currentTarget.dataset.id).delete(); lazerLista = lazerLista.filter(l => l.id !== e.currentTarget.dataset.id); renderizarLazer(); }
+        async function salvarEdicaoLazer(e) {
+            const idx = parseInt(e.currentTarget.dataset.idx);
+            const desc = document.getElementById('editLazerDesc').value.trim();
+            const valor = parseFloat(document.getElementById('editLazerValor').value)||0;
+            const pag = document.getElementById('editLazerPag').value;
+            if(!desc || valor<=0) return alert('Preencha descrição e valor.');
+            const atualizado = { descricao: desc, valor, pagamento: pag };
+            await db.collection('usuarios').doc(userId).collection('lazer').doc(lazerLista[idx].id).update(atualizado);
+            Object.assign(lazerLista[idx], atualizado);
+            lazerEditIndex = -1;
+            renderizarLazer();
+        }
+        document.getElementById('addLazer').addEventListener('click', adicionarLazer);
+
+        // Resumo
+        function atualizarResumo() {
+            if (!userId) {
+                document.getElementById('resEntradas').textContent = 'R$ 0,00';
+                document.getElementById('resCompras').textContent = 'R$ 0,00';
+                document.getElementById('resContas').textContent = 'R$ 0,00';
+                document.getElementById('resLazer').textContent = 'R$ 0,00';
+                document.getElementById('resSaldo').textContent = 'R$ 0,00';
+                return;
+            }
+            const entradas = contasData.entradas || 0;
+            const compras = calcSubtotal();
+            const contas = totalContas();
+            const lazer = totalLazer();
+            const saldo = entradas - (compras + contas + lazer);
+            document.getElementById('resEntradas').textContent = `R$ ${formatarMoeda(entradas)}`;
+            document.getElementById('resCompras').textContent = `R$ ${formatarMoeda(compras)}`;
+            document.getElementById('resContas').textContent = `R$ ${formatarMoeda(contas)}`;
+            document.getElementById('resLazer').textContent = `R$ ${formatarMoeda(lazer)}`;
+            const saldoEl = document.getElementById('resSaldo');
+            saldoEl.textContent = `R$ ${formatarMoeda(saldo)}`;
+            saldoEl.className = 'resumo-valor ' + (saldo >= 0 ? 'positivo' : 'negativo');
+        }
+
+        // Utils
+        function formatarMoeda(v) { return v.toFixed(2).replace('.', ','); }
+        function escapeHtml(t) { const d = document.createElement('div'); d.textContent = t; return d.innerHTML; }
+
+        // Navegação
+        document.getElementById('mesAnoFiltro').value = mesAnoAtual;
+        document.getElementById('mesAnoFiltro').addEventListener('change', function() { mesAnoAtual = this.value; if (userId) carregarTodosDados(); });
+        document.querySelectorAll('.tab-btn').forEach(btn => {
+            btn.addEventListener('click', function() {
+                document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+                this.classList.add('active');
+                document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+                document.getElementById('tab-' + this.dataset.tab).classList.add('active');
+                if (this.dataset.tab === 'resumo') atualizarResumo();
+            });
+        });
+        document.addEventListener('keypress', e => { if (e.key === 'Enter' && document.activeElement?.id === 'produto') adicionarProduto(); });
+    </script>
+</body>
+</html>
